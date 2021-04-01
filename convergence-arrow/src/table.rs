@@ -5,7 +5,7 @@ use convergence::protocol::{DataRow, DataTypeOid, FieldDescription, FormatCode, 
 
 macro_rules! array_cast {
 	($arrtype: ident, $arr: expr) => {
-		$arr.as_any().downcast_ref::<$arrtype>().unwrap()
+		$arr.as_any().downcast_ref::<$arrtype>().expect("array cast failed")
 	};
 }
 

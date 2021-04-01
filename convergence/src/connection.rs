@@ -98,7 +98,10 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-						let statement = self.statements.get(&bind.prepared_statement_name).unwrap();
+						let statement = self
+							.statements
+							.get(&bind.prepared_statement_name)
+							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_SQL_STATEMENT_NAME))?;
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
@@ -110,18 +113,27 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						let statement = self.statements.get(statement_name).unwrap();
+						let statement = self
+							.statements
+							.get(statement_name)
+							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_SQL_STATEMENT_NAME))?;
 						let row_desc = statement.row_desc.clone();
 						self.send(ParameterDescription {}).await?;
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
-						let portal = self.portals.get(portal_name).unwrap();
+						let portal = self
+							.portals
+							.get(portal_name)
+							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_CURSOR_NAME))?;
 						let row_desc = portal.row_desc();
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Execute(exec) => {
-						let portal = self.portals.get_mut(&exec.portal).unwrap();
+						let portal = self
+							.portals
+							.get_mut(&exec.portal)
+							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_CURSOR_NAME))?;
 						let result = portal.fetch().await?;
 						let num_rows = result.rows.len();
 
@@ -156,8 +168,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ConnectionState::Idle
 				}
 				Err(_err) => {
-					// TODO: translate other errors into client errors if sensible
-					self.send(ErrorResponse {}).await?;
+					self.send(ErrorResponse::new(sqlstate::CONNECTION_EXCEPTION)).await?;
 					ConnectionState::Idle
 				}
 			};

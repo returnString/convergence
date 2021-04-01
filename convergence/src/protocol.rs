@@ -132,8 +132,24 @@ pub trait BackendMessage: std::fmt::Debug {
 	fn encode(&self, dst: &mut BytesMut);
 }
 
+pub mod sqlstate {
+	pub const SUCCESSFUL_COMPLETION: &str = "00000";
+	pub const FEATURE_NOT_SUPPORTED: &str = "0A000";
+	pub const INVALID_CURSOR_NAME: &str = "34000";
+	pub const CONNECTION_EXCEPTION: &str = "08000";
+	pub const INVALID_SQL_STATEMENT_NAME: &str = "26000";
+}
+
 #[derive(thiserror::Error, Debug)]
-pub struct ErrorResponse {}
+pub struct ErrorResponse {
+	pub sql_state: &'static str,
+}
+
+impl ErrorResponse {
+	pub fn new(sql_state: &'static str) -> Self {
+		ErrorResponse { sql_state }
+	}
+}
 
 impl Display for ErrorResponse {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -145,7 +161,10 @@ impl BackendMessage for ErrorResponse {
 	const TAG: u8 = b'E';
 
 	fn encode(&self, dst: &mut BytesMut) {
-		// TODO: error details
+		dst.put_u8(b'C');
+		dst.put_slice(self.sql_state.as_bytes());
+		dst.put_u8(0);
+
 		dst.put_u8(0); // tag
 	}
 }
