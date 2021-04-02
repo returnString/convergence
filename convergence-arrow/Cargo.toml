@@ -9,7 +9,7 @@ tokio = { version = "1.0" }
 sqlparser = "0.9"
 async-trait = "0.1"
 arrow = "3.0"
-convergence = { path = "../convergence" }
+convergence = { path = "../convergence", version = "0.1" }
 
 [dev-dependencies]
 tokio-postgres = "0.7"
