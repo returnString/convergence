@@ -49,7 +49,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 	}
 
 	async fn send(&mut self, message: impl BackendMessage) -> Result<(), ConnectionError> {
-		println!("sending message: {:?}", message);
 		self.framed.send(message).await?;
 		Ok(())
 	}
@@ -64,7 +63,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				actual: "eof".to_owned(),
 			})??;
 
-		println!("received message: {:?}", message);
 		Ok(message)
 	}
 
@@ -147,9 +145,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ClientMessage::Sync => {
 						self.send(ReadyForQuery).await?;
 					}
-					other => {
-						println!("unexpected client message: {:?}", other);
-					}
+					_ => return Err(ErrorResponse::new(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
 				};
 
 				Ok(ConnectionState::Idle)
@@ -172,7 +168,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				}
 			};
 
-			println!("moved from {:?} to {:?}", self.state, new_state);
 			self.state = new_state;
 		}
 	}

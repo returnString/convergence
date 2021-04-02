@@ -142,6 +142,7 @@ impl SqlState {
 	pub const CONNECTION_EXCEPTION: SqlState = SqlState("08000");
 	pub const INVALID_SQL_STATEMENT_NAME: SqlState = SqlState("26000");
 	pub const DATA_EXCEPTION: SqlState = SqlState("22000");
+	pub const PROTOCOL_VIOLATION: SqlState = SqlState("08P01");
 }
 
 #[derive(Debug)]
@@ -402,11 +403,6 @@ impl Decoder for ConnectionCodec {
 		}
 
 		if src.len() < MESSAGE_HEADER_SIZE {
-			println!(
-				"not enough data in buffer: {} (expected at least {})",
-				src.len(),
-				MESSAGE_HEADER_SIZE
-			);
 			src.reserve(MESSAGE_HEADER_SIZE);
 			return Ok(None);
 		}
