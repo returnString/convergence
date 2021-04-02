@@ -3,6 +3,9 @@ name = "convergence-arrow"
 version = "0.1.0"
 authors = ["Ruan Pearce-Authers <ruan@reservoirdb.com>"]
 edition = "2018"
+description = "Utils for bridging Apache Arrow and PostgreSQL's wire protocol"
+license = "MIT"
+repository = "https://github.com/reservoirdb/convergence"
 
 [dependencies]
 tokio = { version = "1.0" }
