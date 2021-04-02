@@ -124,6 +124,7 @@ pub enum ClientMessage {
 	Bind(Bind),
 	Sync,
 	Execute(Execute),
+	Query(String),
 }
 
 pub trait BackendMessage: std::fmt::Debug {
@@ -143,6 +144,7 @@ impl SqlState {
 	pub const INVALID_SQL_STATEMENT_NAME: SqlState = SqlState("26000");
 	pub const DATA_EXCEPTION: SqlState = SqlState("22000");
 	pub const PROTOCOL_VIOLATION: SqlState = SqlState("08P01");
+	pub const SYNTAX_ERROR: SqlState = SqlState("42601");
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -500,6 +502,10 @@ impl Decoder for ConnectionCodec {
 				};
 
 				ClientMessage::Execute(Execute { portal, max_rows })
+			}
+			b'Q' => {
+				let query = read_cstr(src)?;
+				ClientMessage::Query(query)
 			}
 			other => return Err(ProtocolError::InvalidMessageType(other)),
 		};

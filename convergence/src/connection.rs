@@ -1,6 +1,7 @@
 use crate::engine::{Engine, Portal, PreparedStatement};
 use crate::protocol::*;
 use futures::{SinkExt, StreamExt};
+use sqlparser::ast::Statement;
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::{Parser, ParserError};
 use std::collections::HashMap;
@@ -76,6 +77,15 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
+	fn parse_statement(text: &str) -> Result<Statement, ConnectionError> {
+		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)?;
+		if statements.len() != 1 {
+			Err(ErrorResponse::error(SqlState::SYNTAX_ERROR, "expected exactly one statement").into())
+		} else {
+			Ok(statements[0].clone())
+		}
+	}
+
 	async fn step(&mut self) -> Result<ConnectionState, ConnectionError> {
 		match self.state {
 			ConnectionState::Startup => {
@@ -97,11 +107,9 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			ConnectionState::Idle => {
 				match self.next().await? {
 					ClientMessage::Parse(parse) => {
-						let parsed_statements = Parser::parse_sql(&PostgreSqlDialect {}, &parse.query)?;
-						self.statements.insert(
-							parse.prepared_statement_name,
-							self.engine.prepare(parsed_statements[0].clone()).await?,
-						);
+						let statement = Self::parse_statement(&parse.query)?;
+						self.statements
+							.insert(parse.prepared_statement_name, self.engine.prepare(statement).await?);
 						self.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
@@ -131,6 +139,9 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let row_desc = self.portal(portal_name)?.row_desc();
 						self.send(row_desc).await?;
 					}
+					ClientMessage::Sync => {
+						self.send(ReadyForQuery).await?;
+					}
 					ClientMessage::Execute(exec) => {
 						let portal = self.portal_mut(&exec.portal)?;
 						let result = portal.fetch().await?;
@@ -145,7 +156,25 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						})
 						.await?;
 					}
-					ClientMessage::Sync => {
+					ClientMessage::Query(query) => {
+						let parsed = Self::parse_statement(&query)?;
+						let statement = self.engine.prepare(parsed).await?;
+						let mut portal = self.engine.create_portal(statement, FormatCode::Text).await?;
+
+						let result = portal.fetch().await?;
+						let num_rows = result.rows.len();
+
+						self.send(portal.row_desc()).await?;
+
+						for row in result.rows {
+							self.send(row).await?;
+						}
+
+						self.send(CommandComplete {
+							command_tag: format!("SELECT {}", num_rows),
+						})
+						.await?;
+
 						self.send(ReadyForQuery).await?;
 					}
 					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),

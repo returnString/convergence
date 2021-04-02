@@ -5,7 +5,7 @@ use convergence::protocol::{
 };
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
-use tokio_postgres::{connect, NoTls};
+use tokio_postgres::{connect, NoTls, SimpleQueryMessage};
 
 struct ReturnSingleScalarPortal {
 	row_desc: RowDescription,
@@ -16,7 +16,10 @@ impl Portal for ReturnSingleScalarPortal {
 	async fn fetch(&mut self) -> Result<QueryResult, ErrorResponse> {
 		Ok(QueryResult {
 			rows: vec![DataRow {
-				values: vec![Some(vec![0, 0, 0, 1])],
+				values: match self.row_desc.format_code {
+					FormatCode::Binary => vec![Some(vec![0, 0, 0, 1])],
+					FormatCode::Text => vec![Some("1".as_bytes().to_vec())],
+				},
 			}],
 		})
 	}
@@ -64,9 +67,10 @@ impl Engine for ReturnSingleScalarEngine {
 
 	async fn create_portal(
 		&mut self,
-		statement: PreparedStatement,
-		_: FormatCode,
+		mut statement: PreparedStatement,
+		format_code: FormatCode,
 	) -> Result<Self::PortalType, ErrorResponse> {
+		statement.row_desc.format_code = format_code;
 		Ok(ReturnSingleScalarPortal {
 			row_desc: statement.row_desc,
 		})
@@ -88,11 +92,32 @@ async fn setup() -> tokio_postgres::Client {
 }
 
 #[tokio::test]
-async fn basic_connection() {
+async fn extended_query_flow() {
 	let client = setup().await;
 	let row = client.query_one("select 1", &[]).await.unwrap();
 	let value: i32 = row.get(0);
 	assert_eq!(value, 1);
+}
+
+#[tokio::test]
+async fn simple_query_flow() {
+	let client = setup().await;
+	let messages = client.simple_query("select 1").await.unwrap();
+	assert_eq!(messages.len(), 2);
+
+	let row = match &messages[0] {
+		SimpleQueryMessage::Row(row) => row,
+		_ => panic!("expected row"),
+	};
+
+	assert_eq!(row.get(0), Some("1"));
+
+	let num_rows = match &messages[1] {
+		SimpleQueryMessage::CommandComplete(rows) => *rows,
+		_ => panic!("expected command complete"),
+	};
+
+	assert_eq!(num_rows, 1);
 }
 
 #[tokio::test]
