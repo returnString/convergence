@@ -172,10 +172,10 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					self.send(err_info).await?;
 					ConnectionState::Idle
 				}
-				Err(_err) => {
+				Err(err) => {
 					self.send(ErrorResponse::new(SqlState::CONNECTION_EXCEPTION, "connection error"))
 						.await?;
-					ConnectionState::Idle
+					return Err(err);
 				}
 			};
 
