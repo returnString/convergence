@@ -6,6 +6,7 @@ pub struct QueryResult {
 	pub rows: Vec<DataRow>,
 }
 
+#[derive(Debug, Clone)]
 pub struct PreparedStatement {
 	pub statement: Statement,
 	pub row_desc: RowDescription,
@@ -27,7 +28,7 @@ pub trait Engine: Send + Sync {
 	async fn prepare(&mut self, stmt: Statement) -> Result<PreparedStatement, ErrorResponse>;
 	async fn create_portal(
 		&mut self,
-		stmt: &PreparedStatement,
+		stmt: PreparedStatement,
 		format_code: FormatCode,
 	) -> Result<Self::PortalType, ErrorResponse>;
 }

@@ -66,6 +66,27 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 		Ok(message)
 	}
 
+	fn prepared_statement(&self, name: &str) -> Result<&PreparedStatement, ConnectionError> {
+		Ok(self
+			.statements
+			.get(name)
+			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
+	}
+
+	fn portal(&self, name: &str) -> Result<&E::PortalType, ConnectionError> {
+		Ok(self
+			.portals
+			.get(name)
+			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+	}
+
+	fn portal_mut(&mut self, name: &str) -> Result<&mut E::PortalType, ConnectionError> {
+		Ok(self
+			.portals
+			.get_mut(name)
+			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+	}
+
 	async fn step(&mut self) -> Result<ConnectionState, ConnectionError> {
 		match self.state {
 			ConnectionState::Startup => {
@@ -96,43 +117,30 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-						let statement = self.statements.get(&bind.prepared_statement_name).ok_or_else(|| {
-							ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement")
-						})?;
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
 								return Err(ConnectionError::UnsupportedFeature("per-column format codes".into()))
 							}
 						};
+
+						let statement = self.prepared_statement(&bind.prepared_statement_name)?.clone();
 						let portal = self.engine.create_portal(statement, format_code).await?;
+
 						self.portals.insert(bind.portal, portal);
 						self.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						let statement = self.statements.get(statement_name).ok_or_else(|| {
-							ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement")
-						})?;
-						let row_desc = statement.row_desc.clone();
+						let row_desc = self.prepared_statement(statement_name)?.row_desc.clone();
 						self.send(ParameterDescription {}).await?;
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
-						let row_desc = {
-							let portal = self
-								.portals
-								.get(portal_name)
-								.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
-
-							portal.row_desc()
-						};
+						let row_desc = self.portal(portal_name)?.row_desc();
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Execute(exec) => {
-						let portal = self
-							.portals
-							.get_mut(&exec.portal)
-							.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
+						let portal = self.portal_mut(&exec.portal)?;
 						let result = portal.fetch().await?;
 						let num_rows = result.rows.len();
 

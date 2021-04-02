@@ -64,11 +64,11 @@ impl Engine for ReturnSingleScalarEngine {
 
 	async fn create_portal(
 		&mut self,
-		statement: &PreparedStatement,
+		statement: PreparedStatement,
 		_: FormatCode,
 	) -> Result<Self::PortalType, ErrorResponse> {
 		Ok(ReturnSingleScalarPortal {
-			row_desc: statement.row_desc.clone(),
+			row_desc: statement.row_desc,
 		})
 	}
 }

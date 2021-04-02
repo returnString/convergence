@@ -56,7 +56,7 @@ impl Engine for ArrowEngine {
 		})
 	}
 
-	async fn create_portal(&mut self, _: &PreparedStatement, _: FormatCode) -> Result<Self::PortalType, ErrorResponse> {
+	async fn create_portal(&mut self, _: PreparedStatement, _: FormatCode) -> Result<Self::PortalType, ErrorResponse> {
 		Ok(ArrowPortal {
 			batch: self.batch.clone(),
 		})

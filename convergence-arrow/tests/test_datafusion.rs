@@ -56,7 +56,7 @@ impl Engine for DataFusionEngine {
 
 	async fn create_portal(
 		&mut self,
-		statement: &PreparedStatement,
+		statement: PreparedStatement,
 		format_code: FormatCode,
 	) -> Result<Self::PortalType, ErrorResponse> {
 		let df = self.ctx.sql(&statement.statement.to_string()).expect("sql failed");
