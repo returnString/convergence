@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use convergence::engine::{Engine, Portal, PreparedStatement, QueryResult};
 use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
 use convergence::server::{self, BindOptions};
-use convergence_arrow::table::{record_batch_to_row_desc, record_batch_to_rows};
+use convergence_arrow::table::{record_batch_to_rows, schema_to_row_desc};
 use sqlparser::ast::Statement;
 use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
@@ -23,7 +23,7 @@ impl Portal for ArrowPortal {
 	}
 
 	fn row_desc(&self) -> RowDescription {
-		record_batch_to_row_desc(&self.batch, FormatCode::Binary)
+		schema_to_row_desc(&self.batch.schema(), FormatCode::Binary)
 	}
 }
 
@@ -52,7 +52,7 @@ impl Engine for ArrowEngine {
 	async fn prepare(&mut self, statement: Statement) -> Result<PreparedStatement, ErrorResponse> {
 		Ok(PreparedStatement {
 			statement,
-			row_desc: record_batch_to_row_desc(&self.batch, FormatCode::Text),
+			row_desc: schema_to_row_desc(&self.batch.schema(), FormatCode::Text),
 		})
 	}
 

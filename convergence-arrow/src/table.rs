@@ -1,5 +1,5 @@
-use arrow::array::{Float64Array, Int32Array, Int64Array, StringArray};
-use arrow::datatypes::DataType;
+use arrow::array::{Int32Array, Int64Array, StringArray, UInt32Array, UInt64Array};
+use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
 use convergence::protocol::{DataRow, DataTypeOid, FieldDescription, FormatCode, RowDescription};
 
@@ -45,7 +45,8 @@ pub fn record_batch_to_rows(batch: &RecordBatch, format_code: FormatCode) -> Vec
 				let bytes = match col.data_type() {
 					DataType::Int32 => pg_bytes_from_arrow!(Int32Array, col, row_idx, format_code),
 					DataType::Int64 => pg_bytes_from_arrow!(Int64Array, col, row_idx, format_code),
-					DataType::Float64 => pg_bytes_from_arrow!(Float64Array, col, row_idx, format_code),
+					DataType::UInt32 => pg_bytes_from_arrow!(UInt32Array, col, row_idx, format_code),
+					DataType::UInt64 => pg_bytes_from_arrow!(UInt64Array, col, row_idx, format_code),
 					DataType::Utf8 => pg_bytes_from_arrow!(StringArray, col, row_idx, format_code, as_bytes, to_owned),
 					_ => unimplemented!(),
 				};
@@ -63,14 +64,17 @@ pub fn record_batch_to_rows(batch: &RecordBatch, format_code: FormatCode) -> Vec
 pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 	match ty {
 		DataType::Int32 => DataTypeOid::Int4,
+		DataType::Int64 => DataTypeOid::Int8,
+		// TODO: need to figure out a sensible mapping here
+		DataType::UInt32 => DataTypeOid::Int4,
+		DataType::UInt64 => DataTypeOid::Int8,
 		DataType::Utf8 => DataTypeOid::Text,
-		_ => unimplemented!(),
+		other => unimplemented!("arrow to pg conversion not implemented: {}", other),
 	}
 }
 
-pub fn record_batch_to_row_desc(batch: &RecordBatch, format_code: FormatCode) -> RowDescription {
-	let fields = batch
-		.schema()
+pub fn schema_to_row_desc(schema: &Schema, format_code: FormatCode) -> RowDescription {
+	let fields = schema
 		.fields()
 		.iter()
 		.map(|f| FieldDescription {

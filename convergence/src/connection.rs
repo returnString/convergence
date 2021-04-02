@@ -30,7 +30,7 @@ enum ConnectionState {
 }
 
 pub struct Connection<E: Engine, S> {
-	backend: E,
+	engine: E,
 	framed: Framed<S, ConnectionCodec>,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
@@ -38,13 +38,13 @@ pub struct Connection<E: Engine, S> {
 }
 
 impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
-	pub fn new(stream: S, backend: E) -> Self {
+	pub fn new(stream: S, engine: E) -> Self {
 		Self {
 			framed: Framed::new(stream, ConnectionCodec::new()),
 			state: ConnectionState::Startup,
 			statements: HashMap::new(),
 			portals: HashMap::new(),
-			backend,
+			engine,
 		}
 	}
 
@@ -91,7 +91,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let parsed_statements = Parser::parse_sql(&PostgreSqlDialect {}, &parse.query)?;
 						self.statements.insert(
 							parse.prepared_statement_name,
-							self.backend.prepare(parsed_statements[0].clone()).await?,
+							self.engine.prepare(parsed_statements[0].clone()).await?,
 						);
 						self.send(ParseComplete).await?;
 					}
@@ -105,7 +105,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 								return Err(ConnectionError::UnsupportedFeature("per-column format codes".into()))
 							}
 						};
-						let portal = self.backend.create_portal(statement, format_code).await?;
+						let portal = self.engine.create_portal(statement, format_code).await?;
 						self.portals.insert(bind.portal, portal);
 						self.send(BindComplete).await?;
 					}
@@ -118,11 +118,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
-						let portal = self
-							.portals
-							.get(portal_name)
-							.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
-						let row_desc = portal.row_desc();
+						let row_desc = {
+							let portal = self
+								.portals
+								.get(portal_name)
+								.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
+
+							portal.row_desc()
+						};
 						self.send(row_desc).await?;
 					}
 					ClientMessage::Execute(exec) => {
