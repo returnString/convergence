@@ -245,7 +245,7 @@ impl BackendMessage for RowDescription {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct DataRow {
 	pub values: Vec<Option<Vec<u8>>>,
 }
@@ -329,6 +329,7 @@ impl BackendMessage for CommandComplete {
 	}
 }
 
+#[derive(Default, Debug)]
 pub struct ConnectionCodec {
 	// most state tracking is handled at a higher level
 	// however, the actual wire format uses a different header for startup vs normal messages

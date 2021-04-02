@@ -46,6 +46,7 @@ impl Engine for ReturnSingleScalarEngine {
 					if let SelectItem::UnnamedExpr(Expr::Identifier(column_name)) = &select.projection[0] {
 						match column_name.value.as_str() {
 							"test_error" => return Err(ErrorResponse::error(SqlState::DATA_EXCEPTION, "test error")),
+							"test_fatal" => return Err(ErrorResponse::fatal(SqlState::DATA_EXCEPTION, "fatal error")),
 							_ => (),
 						}
 					}

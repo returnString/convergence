@@ -2,6 +2,7 @@ use crate::connection::{Connection, ConnectionError};
 use crate::engine::Engine;
 use tokio::net::TcpListener;
 
+#[derive(Default)]
 pub struct BindOptions {
 	addr: String,
 	port: u16,
