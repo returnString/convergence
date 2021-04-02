@@ -15,12 +15,10 @@ pub enum ConnectionError {
 	Protocol(#[from] ProtocolError),
 	#[error("parser error: {0}")]
 	Parser(#[from] ParserError),
-	#[error("unexpected state {actual}, expeccted {expected}")]
-	UnexpectedState { expected: String, actual: String },
 	#[error("error response: {0}")]
 	ErrorResponse(#[from] ErrorResponse),
-	#[error("unsupported feature: {0}")]
-	UnsupportedFeature(String),
+	#[error("connection closed")]
+	ConnectionClosed,
 }
 
 #[derive(Debug)]
@@ -54,37 +52,28 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 	}
 
 	async fn next(&mut self) -> Result<ClientMessage, ConnectionError> {
-		let message = self
-			.framed
-			.next()
-			.await
-			.ok_or_else(|| ConnectionError::UnexpectedState {
-				expected: "any".to_owned(),
-				actual: "eof".to_owned(),
-			})??;
-
-		Ok(message)
+		Ok(self.framed.next().await.ok_or(ConnectionError::ConnectionClosed)??)
 	}
 
 	fn prepared_statement(&self, name: &str) -> Result<&PreparedStatement, ConnectionError> {
 		Ok(self
 			.statements
 			.get(name)
-			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
 	}
 
 	fn portal(&self, name: &str) -> Result<&E::PortalType, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
-			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
 	fn portal_mut(&mut self, name: &str) -> Result<&mut E::PortalType, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
-			.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
 	async fn step(&mut self) -> Result<ConnectionState, ConnectionError> {
@@ -94,11 +83,10 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ClientMessage::Startup(_startup) => {
 						// do startup stuff
 					}
-					other => {
-						return Err(ConnectionError::UnexpectedState {
-							expected: "startup".to_owned(),
-							actual: format!("{:?}", other),
-						})
+					_ => {
+						return Err(
+							ErrorResponse::fatal(SqlState::PROTOCOL_VIOLATION, "expected startup message").into(),
+						)
 					}
 				}
 
@@ -120,7 +108,11 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
-								return Err(ConnectionError::UnsupportedFeature("per-column format codes".into()))
+								return Err(ErrorResponse::error(
+									SqlState::FEATURE_NOT_SUPPORTED,
+									"per-column format codes not supported",
+								)
+								.into());
 							}
 						};
 
@@ -156,7 +148,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ClientMessage::Sync => {
 						self.send(ReadyForQuery).await?;
 					}
-					_ => return Err(ErrorResponse::new(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
+					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
 				};
 
 				Ok(ConnectionState::Idle)
@@ -169,11 +161,16 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			let new_state = match self.step().await {
 				Ok(state) => state,
 				Err(ConnectionError::ErrorResponse(err_info)) => {
-					self.send(err_info).await?;
+					self.send(err_info.clone()).await?;
+
+					if err_info.severity == Severity::FATAL {
+						return Err(err_info.into());
+					}
+
 					ConnectionState::Idle
 				}
 				Err(err) => {
-					self.send(ErrorResponse::new(SqlState::CONNECTION_EXCEPTION, "connection error"))
+					self.send(ErrorResponse::fatal(SqlState::CONNECTION_EXCEPTION, "connection error"))
 						.await?;
 					return Err(err);
 				}

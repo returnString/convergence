@@ -132,7 +132,7 @@ pub trait BackendMessage: std::fmt::Debug {
 	fn encode(&self, dst: &mut BytesMut);
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SqlState(pub &'static str);
 
 impl SqlState {
@@ -145,14 +145,15 @@ impl SqlState {
 	pub const PROTOCOL_VIOLATION: SqlState = SqlState("08P01");
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Severity(pub &'static str);
 
 impl Severity {
 	pub const ERROR: Severity = Severity("ERROR");
+	pub const FATAL: Severity = Severity("FATAL");
 }
 
-#[derive(thiserror::Error, Debug)]
+#[derive(thiserror::Error, Debug, Clone)]
 pub struct ErrorResponse {
 	pub sql_state: SqlState,
 	pub severity: Severity,
@@ -160,12 +161,20 @@ pub struct ErrorResponse {
 }
 
 impl ErrorResponse {
-	pub fn new(sql_state: SqlState, message: impl Into<String>) -> Self {
+	pub fn new(sql_state: SqlState, severity: Severity, message: impl Into<String>) -> Self {
 		ErrorResponse {
 			sql_state,
-			severity: Severity::ERROR,
+			severity,
 			message: message.into(),
 		}
+	}
+
+	pub fn error(sql_state: SqlState, message: impl Into<String>) -> Self {
+		Self::new(sql_state, Severity::ERROR, message)
+	}
+
+	pub fn fatal(sql_state: SqlState, message: impl Into<String>) -> Self {
+		Self::new(sql_state, Severity::FATAL, message)
 	}
 }
 
