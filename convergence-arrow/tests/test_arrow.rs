@@ -63,15 +63,23 @@ impl Engine for ArrowEngine {
 	}
 }
 
-#[tokio::test]
-async fn basic_connection() {
-	let _handle = server::run_background::<ArrowEngine>(BindOptions::new());
+async fn setup() -> tokio_postgres::Client {
+	let port = server::run_background::<ArrowEngine>(BindOptions::new().with_port(0))
+		.await
+		.unwrap();
 
-	let (client, conn) = connect("postgres://localhost:5432/test", NoTls)
+	let (client, conn) = connect(&format!("postgres://localhost:{}/test", port), NoTls)
 		.await
 		.expect("failed to init client");
 
-	let _conn_handle = tokio::spawn(async move { conn.await.unwrap() });
+	tokio::spawn(async move { conn.await.unwrap() });
+
+	client
+}
+
+#[tokio::test]
+async fn basic_connection() {
+	let client = setup().await;
 
 	let rows = client.query("select 1", &[]).await.unwrap();
 	let get_row = |idx: usize| {

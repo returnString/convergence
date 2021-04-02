@@ -98,10 +98,9 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-						let statement = self
-							.statements
-							.get(&bind.prepared_statement_name)
-							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_SQL_STATEMENT_NAME))?;
+						let statement = self.statements.get(&bind.prepared_statement_name).ok_or_else(|| {
+							ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement")
+						})?;
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
@@ -113,10 +112,9 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						let statement = self
-							.statements
-							.get(statement_name)
-							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_SQL_STATEMENT_NAME))?;
+						let statement = self.statements.get(statement_name).ok_or_else(|| {
+							ErrorResponse::new(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement")
+						})?;
 						let row_desc = statement.row_desc.clone();
 						self.send(ParameterDescription {}).await?;
 						self.send(row_desc).await?;
@@ -125,7 +123,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let portal = self
 							.portals
 							.get(portal_name)
-							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_CURSOR_NAME))?;
+							.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
 						let row_desc = portal.row_desc();
 						self.send(row_desc).await?;
 					}
@@ -133,7 +131,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let portal = self
 							.portals
 							.get_mut(&exec.portal)
-							.ok_or_else(|| ErrorResponse::new(sqlstate::INVALID_CURSOR_NAME))?;
+							.ok_or_else(|| ErrorResponse::new(SqlState::INVALID_CURSOR_NAME, "missing portal"))?;
 						let result = portal.fetch().await?;
 						let num_rows = result.rows.len();
 
@@ -168,7 +166,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ConnectionState::Idle
 				}
 				Err(_err) => {
-					self.send(ErrorResponse::new(sqlstate::CONNECTION_EXCEPTION)).await?;
+					self.send(ErrorResponse::new(SqlState::CONNECTION_EXCEPTION, "connection error"))
+						.await?;
 					ConnectionState::Idle
 				}
 			};

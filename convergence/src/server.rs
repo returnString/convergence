@@ -30,9 +30,7 @@ impl BindOptions {
 	}
 }
 
-pub async fn run<E: Engine>(bind: BindOptions) -> Result<(), ConnectionError> {
-	let listener = TcpListener::bind((bind.addr, bind.port)).await?;
-
+pub async fn run_with_listener<E: Engine>(listener: TcpListener) -> Result<(), ConnectionError> {
 	loop {
 		let (stream, _) = listener.accept().await?;
 		tokio::spawn(async move {
@@ -43,6 +41,16 @@ pub async fn run<E: Engine>(bind: BindOptions) -> Result<(), ConnectionError> {
 	}
 }
 
-pub fn run_background<E: Engine>(bind: BindOptions) -> tokio::task::JoinHandle<Result<(), ConnectionError>> {
-	tokio::spawn(async move { run::<E>(bind).await })
+pub async fn run<E: Engine>(bind: BindOptions) -> Result<(), ConnectionError> {
+	let listener = TcpListener::bind((bind.addr, bind.port)).await?;
+	run_with_listener::<E>(listener).await
+}
+
+pub async fn run_background<E: Engine>(bind: BindOptions) -> Result<u16, ConnectionError> {
+	let listener = TcpListener::bind((bind.addr, bind.port)).await?;
+	let port = listener.local_addr()?.port();
+
+	tokio::spawn(async move { run_with_listener::<E>(listener).await });
+
+	Ok(port)
 }

@@ -1,8 +1,10 @@
 use async_trait::async_trait;
 use convergence::engine::{Engine, Portal, PreparedStatement, QueryResult};
-use convergence::protocol::{DataRow, DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription};
+use convergence::protocol::{
+	DataRow, DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription, SqlState,
+};
 use convergence::server::{self, BindOptions};
-use sqlparser::ast::Statement;
+use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
 use tokio_postgres::{connect, NoTls};
 
 struct ReturnSingleScalarPortal {
@@ -35,6 +37,19 @@ impl Engine for ReturnSingleScalarEngine {
 	}
 
 	async fn prepare(&mut self, statement: Statement) -> Result<PreparedStatement, ErrorResponse> {
+		if let Statement::Query(query) = &statement {
+			if let SetExpr::Select(select) = &query.body {
+				if select.projection.len() == 1 {
+					if let SelectItem::UnnamedExpr(Expr::Identifier(column_name)) = &select.projection[0] {
+						match column_name.value.as_str() {
+							"test_error" => return Err(ErrorResponse::new(SqlState::DATA_EXCEPTION, "test error")),
+							_ => (),
+						}
+					}
+				}
+			}
+		}
+
 		Ok(PreparedStatement {
 			statement,
 			row_desc: RowDescription {
@@ -58,17 +73,35 @@ impl Engine for ReturnSingleScalarEngine {
 	}
 }
 
-#[tokio::test]
-async fn basic_connection() {
-	let _handle = server::run_background::<ReturnSingleScalarEngine>(BindOptions::new());
+async fn setup() -> tokio_postgres::Client {
+	let port = server::run_background::<ReturnSingleScalarEngine>(BindOptions::new().with_port(0))
+		.await
+		.unwrap();
 
-	let (client, conn) = connect("postgres://localhost:5432/test", NoTls)
+	let (client, conn) = connect(&format!("postgres://localhost:{}/test", port), NoTls)
 		.await
 		.expect("failed to init client");
 
-	let _conn_handle = tokio::spawn(async move { conn.await.unwrap() });
+	tokio::spawn(async move { conn.await.unwrap() });
 
+	client
+}
+
+#[tokio::test]
+async fn basic_connection() {
+	let client = setup().await;
 	let row = client.query_one("select 1", &[]).await.unwrap();
 	let value: i32 = row.get(0);
 	assert_eq!(value, 1);
+}
+
+#[tokio::test]
+async fn error_handling() {
+	let client = setup().await;
+	let err = client
+		.query_one("select test_error from blah", &[])
+		.await
+		.expect_err("expected error in query");
+
+	assert_eq!(err.code().unwrap().code(), SqlState::DATA_EXCEPTION.0);
 }

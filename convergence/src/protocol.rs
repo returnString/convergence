@@ -132,22 +132,39 @@ pub trait BackendMessage: std::fmt::Debug {
 	fn encode(&self, dst: &mut BytesMut);
 }
 
-pub mod sqlstate {
-	pub const SUCCESSFUL_COMPLETION: &str = "00000";
-	pub const FEATURE_NOT_SUPPORTED: &str = "0A000";
-	pub const INVALID_CURSOR_NAME: &str = "34000";
-	pub const CONNECTION_EXCEPTION: &str = "08000";
-	pub const INVALID_SQL_STATEMENT_NAME: &str = "26000";
+#[derive(Debug)]
+pub struct SqlState(pub &'static str);
+
+impl SqlState {
+	pub const SUCCESSFUL_COMPLETION: SqlState = SqlState("00000");
+	pub const FEATURE_NOT_SUPPORTED: SqlState = SqlState("0A000");
+	pub const INVALID_CURSOR_NAME: SqlState = SqlState("34000");
+	pub const CONNECTION_EXCEPTION: SqlState = SqlState("08000");
+	pub const INVALID_SQL_STATEMENT_NAME: SqlState = SqlState("26000");
+	pub const DATA_EXCEPTION: SqlState = SqlState("22000");
+}
+
+#[derive(Debug)]
+pub struct Severity(pub &'static str);
+
+impl Severity {
+	pub const ERROR: Severity = Severity("ERROR");
 }
 
 #[derive(thiserror::Error, Debug)]
 pub struct ErrorResponse {
-	pub sql_state: &'static str,
+	pub sql_state: SqlState,
+	pub severity: Severity,
+	pub message: String,
 }
 
 impl ErrorResponse {
-	pub fn new(sql_state: &'static str) -> Self {
-		ErrorResponse { sql_state }
+	pub fn new(sql_state: SqlState, message: impl Into<String>) -> Self {
+		ErrorResponse {
+			sql_state,
+			severity: Severity::ERROR,
+			message: message.into(),
+		}
 	}
 }
 
@@ -162,7 +179,13 @@ impl BackendMessage for ErrorResponse {
 
 	fn encode(&self, dst: &mut BytesMut) {
 		dst.put_u8(b'C');
-		dst.put_slice(self.sql_state.as_bytes());
+		dst.put_slice(self.sql_state.0.as_bytes());
+		dst.put_u8(0);
+		dst.put_u8(b'S');
+		dst.put_slice(self.severity.0.as_bytes());
+		dst.put_u8(0);
+		dst.put_u8(b'M');
+		dst.put_slice(self.message.as_bytes());
 		dst.put_u8(0);
 
 		dst.put_u8(0); // tag
