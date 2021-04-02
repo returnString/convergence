@@ -11,7 +11,7 @@ use tokio_util::codec::Framed;
 #[derive(thiserror::Error, Debug)]
 pub enum ConnectionError {
 	#[error("io error: {0}")]
-	IO(#[from] std::io::Error),
+	Io(#[from] std::io::Error),
 	#[error("protocol error: {0}")]
 	Protocol(#[from] ProtocolError),
 	#[error("parser error: {0}")]
