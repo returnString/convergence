@@ -48,11 +48,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 		}
 	}
 
-	async fn send(&mut self, message: impl BackendMessage) -> Result<(), ConnectionError> {
-		self.framed.send(message).await?;
-		Ok(())
-	}
-
 	async fn next(&mut self) -> Result<ClientMessage, ConnectionError> {
 		Ok(self.framed.next().await.ok_or(ConnectionError::ConnectionClosed)??)
 	}
@@ -101,8 +96,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					}
 				}
 
-				self.send(AuthenticationOk).await?;
-				self.send(ReadyForQuery).await?;
+				self.framed.send(AuthenticationOk).await?;
+				self.framed.send(ReadyForQuery).await?;
 				Ok(ConnectionState::Idle)
 			}
 			ConnectionState::Idle => {
@@ -111,7 +106,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let statement = Self::parse_statement(&parse.query)?;
 						self.statements
 							.insert(parse.prepared_statement_name, self.engine.prepare(statement).await?);
-						self.send(ParseComplete).await?;
+						self.framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
 						let format_code = match bind.result_format {
@@ -129,19 +124,19 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let portal = self.engine.create_portal(statement, format_code).await?;
 
 						self.portals.insert(bind.portal, portal);
-						self.send(BindComplete).await?;
+						self.framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
 						let row_desc = self.prepared_statement(statement_name)?.row_desc.clone();
-						self.send(ParameterDescription {}).await?;
-						self.send(row_desc).await?;
+						self.framed.send(ParameterDescription {}).await?;
+						self.framed.send(row_desc).await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
 						let row_desc = self.portal(portal_name)?.row_desc();
-						self.send(row_desc).await?;
+						self.framed.send(row_desc).await?;
 					}
 					ClientMessage::Sync => {
-						self.send(ReadyForQuery).await?;
+						self.framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Execute(exec) => {
 						let portal = self.portal_mut(&exec.portal)?;
@@ -153,10 +148,11 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 						self.framed.send(batch_writer).await?;
 
-						self.send(CommandComplete {
-							command_tag: format!("SELECT {}", num_rows),
-						})
-						.await?;
+						self.framed
+							.send(CommandComplete {
+								command_tag: format!("SELECT {}", num_rows),
+							})
+							.await?;
 					}
 					ClientMessage::Query(query) => {
 						let parsed = Self::parse_statement(&query)?;
@@ -167,15 +163,16 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						portal.fetch(&mut batch_writer).await?;
 						let num_rows = batch_writer.num_rows();
 
-						self.send(portal.row_desc()).await?;
+						self.framed.send(portal.row_desc()).await?;
 						self.framed.send(batch_writer).await?;
 
-						self.send(CommandComplete {
-							command_tag: format!("SELECT {}", num_rows),
-						})
-						.await?;
+						self.framed
+							.send(CommandComplete {
+								command_tag: format!("SELECT {}", num_rows),
+							})
+							.await?;
 
-						self.send(ReadyForQuery).await?;
+						self.framed.send(ReadyForQuery).await?;
 					}
 					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
 				};
@@ -190,7 +187,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			let new_state = match self.step().await {
 				Ok(state) => state,
 				Err(ConnectionError::ErrorResponse(err_info)) => {
-					self.send(err_info.clone()).await?;
+					self.framed.send(err_info.clone()).await?;
 
 					if err_info.severity == Severity::FATAL {
 						return Err(err_info.into());
@@ -199,7 +196,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ConnectionState::Idle
 				}
 				Err(err) => {
-					self.send(ErrorResponse::fatal(SqlState::CONNECTION_EXCEPTION, "connection error"))
+					self.framed
+						.send(ErrorResponse::fatal(SqlState::CONNECTION_EXCEPTION, "connection error"))
 						.await?;
 					return Err(err);
 				}
