@@ -1,10 +1,7 @@
-use crate::protocol::{DataRow, ErrorResponse, FormatCode, RowDescription};
+use crate::protocol::{ErrorResponse, FormatCode, RowDescription};
+use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use sqlparser::ast::Statement;
-
-pub struct QueryResult {
-	pub rows: Vec<DataRow>,
-}
 
 #[derive(Debug, Clone)]
 pub struct PreparedStatement {
@@ -16,7 +13,7 @@ pub struct PreparedStatement {
 pub trait Portal: Send + Sync {
 	fn row_desc(&self) -> RowDescription;
 
-	async fn fetch(&mut self) -> Result<QueryResult, ErrorResponse>;
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse>;
 }
 
 #[async_trait]

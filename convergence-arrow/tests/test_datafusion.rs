@@ -1,6 +1,7 @@
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement, QueryResult};
+use convergence::engine::{Engine, Portal, PreparedStatement};
 use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
+use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use convergence_arrow::table::{record_batch_to_rows, schema_to_row_desc};
 use datafusion::prelude::*;
@@ -19,13 +20,11 @@ impl Portal for DataFusionPortal {
 		schema_to_row_desc(&self.df.schema().clone().into(), self.format_code)
 	}
 
-	async fn fetch(&mut self) -> Result<QueryResult, ErrorResponse> {
-		let mut rows = Vec::new();
-		for batch in self.df.collect().await.expect("collect failed") {
-			rows.extend(record_batch_to_rows(&batch, self.format_code));
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+		for arrow_batch in self.df.collect().await.expect("collect failed") {
+			record_batch_to_rows(&arrow_batch, batch);
 		}
-
-		Ok(QueryResult { rows })
+		Ok(())
 	}
 }
 

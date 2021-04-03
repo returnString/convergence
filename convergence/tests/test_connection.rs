@@ -1,8 +1,7 @@
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement, QueryResult};
-use convergence::protocol::{
-	DataRow, DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription, SqlState,
-};
+use convergence::engine::{Engine, Portal, PreparedStatement};
+use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription, SqlState};
+use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
 use tokio_postgres::{connect, NoTls, SimpleQueryMessage};
@@ -13,15 +12,10 @@ struct ReturnSingleScalarPortal {
 
 #[async_trait]
 impl Portal for ReturnSingleScalarPortal {
-	async fn fetch(&mut self) -> Result<QueryResult, ErrorResponse> {
-		Ok(QueryResult {
-			rows: vec![DataRow {
-				values: match self.row_desc.format_code {
-					FormatCode::Binary => vec![Some(vec![0, 0, 0, 1])],
-					FormatCode::Text => vec![Some("1".as_bytes().to_vec())],
-				},
-			}],
-		})
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+		let mut row = batch.create_row();
+		row.i32(1);
+		Ok(())
 	}
 
 	fn row_desc(&self) -> RowDescription {

@@ -1,5 +1,6 @@
 use crate::engine::{Engine, Portal, PreparedStatement};
 use crate::protocol::*;
+use crate::protocol_ext::DataRowBatch;
 use futures::{SinkExt, StreamExt};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::PostgreSqlDialect;
@@ -144,12 +145,13 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					}
 					ClientMessage::Execute(exec) => {
 						let portal = self.portal_mut(&exec.portal)?;
-						let result = portal.fetch().await?;
-						let num_rows = result.rows.len();
 
-						for row in result.rows {
-							self.send(row).await?;
-						}
+						let row_desc = portal.row_desc();
+						let mut batch_writer = DataRowBatch::new(row_desc.format_code, row_desc.fields.len());
+						portal.fetch(&mut batch_writer).await?;
+						let num_rows = batch_writer.num_rows();
+
+						self.framed.send(batch_writer).await?;
 
 						self.send(CommandComplete {
 							command_tag: format!("SELECT {}", num_rows),
@@ -161,14 +163,12 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						let statement = self.engine.prepare(parsed).await?;
 						let mut portal = self.engine.create_portal(statement, FormatCode::Text).await?;
 
-						let result = portal.fetch().await?;
-						let num_rows = result.rows.len();
+						let mut batch_writer = DataRowBatch::new(FormatCode::Text, portal.row_desc().fields.len());
+						portal.fetch(&mut batch_writer).await?;
+						let num_rows = batch_writer.num_rows();
 
 						self.send(portal.row_desc()).await?;
-
-						for row in result.rows {
-							self.send(row).await?;
-						}
+						self.framed.send(batch_writer).await?;
 
 						self.send(CommandComplete {
 							command_tag: format!("SELECT {}", num_rows),

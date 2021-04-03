@@ -2,8 +2,9 @@ use arrow::array::{ArrayRef, Int32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement, QueryResult};
+use convergence::engine::{Engine, Portal, PreparedStatement};
 use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
+use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use convergence_arrow::table::{record_batch_to_rows, schema_to_row_desc};
 use sqlparser::ast::Statement;
@@ -16,10 +17,9 @@ struct ArrowPortal {
 
 #[async_trait]
 impl Portal for ArrowPortal {
-	async fn fetch(&mut self) -> Result<QueryResult, ErrorResponse> {
-		Ok(QueryResult {
-			rows: record_batch_to_rows(&self.batch, FormatCode::Binary),
-		})
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+		record_batch_to_rows(&self.batch, batch);
+		Ok(())
 	}
 
 	fn row_desc(&self) -> RowDescription {

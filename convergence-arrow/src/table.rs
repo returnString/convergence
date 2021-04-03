@@ -1,7 +1,8 @@
 use arrow::array::{Int32Array, Int64Array, StringArray, UInt32Array, UInt64Array};
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
-use convergence::protocol::{DataRow, DataTypeOid, FieldDescription, FormatCode, RowDescription};
+use convergence::protocol::{DataTypeOid, FieldDescription, FormatCode, RowDescription};
+use convergence::protocol_ext::DataRowBatch;
 
 macro_rules! array_cast {
 	($arrtype: ident, $arr: expr) => {
@@ -18,47 +19,25 @@ macro_rules! array_val {
 	};
 }
 
-macro_rules! pg_bytes_from_arrow {
-	($arrtype: ident, $arr: expr, $idx: expr, $format: expr) => {
-		pg_bytes_from_arrow!($arrtype, $arr, $idx, $format, to_be_bytes, to_vec)
-	};
-	($arrtype: ident, $arr: expr, $idx: expr, $format: expr, $raw_getter: ident, $post_getter: ident) => {{
-		let val = array_val!($arrtype, $arr, $idx);
-
-		match $format {
-			FormatCode::Text => val.to_string().into_bytes(),
-			FormatCode::Binary => val.$raw_getter().$post_getter(),
-		}
-	}};
-}
-
-pub fn record_batch_to_rows(batch: &RecordBatch, format_code: FormatCode) -> Vec<DataRow> {
-	let mut ret = Vec::new();
-
-	for row_idx in 0..batch.num_rows() {
-		let mut row_values = Vec::new();
-		for col_idx in 0..batch.num_columns() {
-			let col = batch.column(col_idx);
+pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBatch) {
+	for row_idx in 0..arrow_batch.num_rows() {
+		let mut row = pg_batch.create_row();
+		for col_idx in 0..arrow_batch.num_columns() {
+			let col = arrow_batch.column(col_idx);
 			if col.is_null(row_idx) {
-				row_values.push(None);
+				row.null();
 			} else {
-				let bytes = match col.data_type() {
-					DataType::Int32 => pg_bytes_from_arrow!(Int32Array, col, row_idx, format_code),
-					DataType::Int64 => pg_bytes_from_arrow!(Int64Array, col, row_idx, format_code),
-					DataType::UInt32 => pg_bytes_from_arrow!(UInt32Array, col, row_idx, format_code),
-					DataType::UInt64 => pg_bytes_from_arrow!(UInt64Array, col, row_idx, format_code),
-					DataType::Utf8 => pg_bytes_from_arrow!(StringArray, col, row_idx, format_code, as_bytes, to_owned),
+				match col.data_type() {
+					DataType::Int32 => row.i32(array_val!(Int32Array, col, row_idx)),
+					DataType::Int64 => row.i64(array_val!(Int64Array, col, row_idx)),
+					DataType::UInt32 => row.i32(array_val!(UInt32Array, col, row_idx) as i32),
+					DataType::UInt64 => row.i64(array_val!(UInt64Array, col, row_idx) as i64),
+					DataType::Utf8 => row.string(array_val!(StringArray, col, row_idx)),
 					_ => unimplemented!(),
 				};
-
-				row_values.push(Some(bytes));
 			}
 		}
-
-		ret.push(DataRow { values: row_values });
 	}
-
-	ret
 }
 
 pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
