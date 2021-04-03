@@ -57,6 +57,9 @@ data_types! {
 	Int4 = 23, 4
 	Int8 = 20, 8
 
+	Float4 = 700, 4
+	Float8 = 701, 8
+
 	Text = 25, -1
 }
 

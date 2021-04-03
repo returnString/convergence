@@ -1,4 +1,7 @@
-use arrow::array::{Int32Array, Int64Array, StringArray, UInt32Array, UInt64Array};
+use arrow::array::{
+	Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray, UInt16Array, UInt32Array,
+	UInt64Array, UInt8Array,
+};
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
 use convergence::protocol::{DataTypeOid, FieldDescription, FormatCode, RowDescription};
@@ -11,11 +14,8 @@ macro_rules! array_cast {
 }
 
 macro_rules! array_val {
-	($arrtype: ident, $arr: expr, $idx: expr, $value_func: ident) => {
-		array_cast!($arrtype, $arr).$value_func($idx)
-	};
 	($arrtype: ident, $arr: expr, $idx: expr) => {
-		array_val!($arrtype, $arr, $idx, value)
+		array_cast!($arrtype, $arr).value($idx)
 	};
 }
 
@@ -28,10 +28,16 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 				row.null();
 			} else {
 				match col.data_type() {
+					DataType::Int8 => row.i16(array_val!(Int8Array, col, row_idx) as i16),
+					DataType::Int16 => row.i16(array_val!(Int16Array, col, row_idx)),
 					DataType::Int32 => row.i32(array_val!(Int32Array, col, row_idx)),
 					DataType::Int64 => row.i64(array_val!(Int64Array, col, row_idx)),
+					DataType::UInt8 => row.i16(array_val!(UInt8Array, col, row_idx) as i16),
+					DataType::UInt16 => row.i16(array_val!(UInt16Array, col, row_idx) as i16),
 					DataType::UInt32 => row.i32(array_val!(UInt32Array, col, row_idx) as i32),
 					DataType::UInt64 => row.i64(array_val!(UInt64Array, col, row_idx) as i64),
+					DataType::Float32 => row.f32(array_val!(Float32Array, col, row_idx)),
+					DataType::Float64 => row.f64(array_val!(Float64Array, col, row_idx)),
 					DataType::Utf8 => row.string(array_val!(StringArray, col, row_idx)),
 					_ => unimplemented!(),
 				};
@@ -42,11 +48,16 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 
 pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 	match ty {
+		DataType::Int8 | DataType::Int16 => DataTypeOid::Int2,
 		DataType::Int32 => DataTypeOid::Int4,
 		DataType::Int64 => DataTypeOid::Int8,
-		// TODO: need to figure out a sensible mapping here
+		// TODO: need to figure out a sensible mapping for unsigned
+		DataType::UInt8 | DataType::UInt16 => DataTypeOid::Int2,
 		DataType::UInt32 => DataTypeOid::Int4,
 		DataType::UInt64 => DataTypeOid::Int8,
+		// TODO: DataType::Float16 exists and could be mapped to Float4, but there's no Float16Array
+		DataType::Float32 => DataTypeOid::Float4,
+		DataType::Float64 => DataTypeOid::Float8,
 		DataType::Utf8 => DataTypeOid::Text,
 		other => unimplemented!("arrow to pg conversion not implemented: {}", other),
 	}
