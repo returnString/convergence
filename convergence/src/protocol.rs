@@ -248,30 +248,6 @@ impl BackendMessage for RowDescription {
 	}
 }
 
-#[derive(Default, Debug)]
-pub struct DataRow {
-	pub values: Vec<Option<Vec<u8>>>,
-}
-
-impl BackendMessage for DataRow {
-	const TAG: u8 = b'D';
-
-	fn encode(&self, dst: &mut BytesMut) {
-		dst.put_i16(self.values.len() as i16);
-		for value in &self.values {
-			match value {
-				Some(bytes) => {
-					dst.put_i32(bytes.len() as i32);
-					dst.put_slice(bytes);
-				}
-				None => {
-					dst.put_i32(-1);
-				}
-			};
-		}
-	}
-}
-
 #[derive(Debug)]
 pub struct AuthenticationOk;
 
