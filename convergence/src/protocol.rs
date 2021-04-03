@@ -128,6 +128,7 @@ pub enum ClientMessage {
 	Sync,
 	Execute(Execute),
 	Query(String),
+	Terminate,
 }
 
 pub trait BackendMessage: std::fmt::Debug {
@@ -507,6 +508,7 @@ impl Decoder for ConnectionCodec {
 				let query = read_cstr(src)?;
 				ClientMessage::Query(query)
 			}
+			b'X' => ClientMessage::Terminate,
 			other => return Err(ProtocolError::InvalidMessageType(other)),
 		};
 

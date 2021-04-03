@@ -84,16 +84,20 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
-	fn parse_statement(text: &str) -> Result<Statement, ConnectionError> {
+	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ConnectionError> {
 		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)?;
 		if statements.len() != 1 {
 			Err(ErrorResponse::error(SqlState::SYNTAX_ERROR, "expected exactly one statement").into())
 		} else {
-			Ok(statements[0].clone())
+			let statement = &statements[0];
+			Ok(match statement {
+				Statement::SetVariable { .. } => None,
+				other => Some(other.clone()),
+			})
 		}
 	}
 
-	async fn step(&mut self) -> Result<ConnectionState, ConnectionError> {
+	async fn step(&mut self) -> Result<Option<ConnectionState>, ConnectionError> {
 		match self.state {
 			ConnectionState::Startup => {
 				match self.next().await? {
@@ -112,12 +116,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					.send(ParameterStatus::new("client_encoding", "UTF8"))
 					.await?;
 				self.framed.send(ReadyForQuery).await?;
-				Ok(ConnectionState::Idle)
+				Ok(Some(ConnectionState::Idle))
 			}
 			ConnectionState::Idle => {
 				match self.next().await? {
 					ClientMessage::Parse(parse) => {
-						let statement = Self::parse_statement(&parse.query)?;
+						let statement = self.parse_statement(&parse.query)?.ok_or_else(|| {
+							ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "invalid statement for parsing")
+						})?;
 						self.statements.insert(
 							parse.prepared_statement_name,
 							PreparedStatement {
@@ -182,33 +188,40 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							.await?;
 					}
 					ClientMessage::Query(query) => {
-						let parsed = Self::parse_statement(&query)?;
-						let fields = self.engine.prepare(&parsed).await?;
-						let row_desc = RowDescription {
-							fields,
-							format_code: FormatCode::Text,
-						};
-						let mut portal = self.engine.create_portal(&parsed).await?;
+						if let Some(parsed) = self.parse_statement(&query)? {
+							let fields = self.engine.prepare(&parsed).await?;
+							let row_desc = RowDescription {
+								fields,
+								format_code: FormatCode::Text,
+							};
+							let mut portal = self.engine.create_portal(&parsed).await?;
 
-						let mut batch_writer = DataRowBatch::from_row_desc(&row_desc);
-						portal.fetch(&mut batch_writer).await?;
-						let num_rows = batch_writer.num_rows();
+							let mut batch_writer = DataRowBatch::from_row_desc(&row_desc);
+							portal.fetch(&mut batch_writer).await?;
+							let num_rows = batch_writer.num_rows();
 
-						self.framed.send(row_desc).await?;
-						self.framed.send(batch_writer).await?;
+							self.framed.send(row_desc).await?;
+							self.framed.send(batch_writer).await?;
 
-						self.framed
-							.send(CommandComplete {
-								command_tag: format!("SELECT {}", num_rows),
-							})
-							.await?;
-
+							self.framed
+								.send(CommandComplete {
+									command_tag: format!("SELECT {}", num_rows),
+								})
+								.await?;
+						} else {
+							self.framed
+								.send(CommandComplete {
+									command_tag: "SET".to_string(),
+								})
+								.await?;
+						}
 						self.framed.send(ReadyForQuery).await?;
 					}
+					ClientMessage::Terminate => return Ok(None),
 					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
 				};
 
-				Ok(ConnectionState::Idle)
+				Ok(Some(ConnectionState::Idle))
 			}
 		}
 	}
@@ -216,7 +229,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 	pub async fn run(&mut self) -> Result<(), ConnectionError> {
 		loop {
 			let new_state = match self.step().await {
-				Ok(state) => state,
+				Ok(Some(state)) => state,
+				Ok(None) => return Ok(()),
 				Err(ConnectionError::ErrorResponse(err_info)) => {
 					self.framed.send(err_info.clone()).await?;
 
