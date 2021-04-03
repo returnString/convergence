@@ -1,4 +1,4 @@
-use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError};
+use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
 use tokio_util::codec::Encoder;
 
@@ -19,6 +19,10 @@ impl DataRowBatch {
 			data: BytesMut::new(),
 			row: BytesMut::new(),
 		}
+	}
+
+	pub fn from_row_desc(desc: &RowDescription) -> Self {
+		Self::new(desc.format_code, desc.fields.len())
 	}
 
 	pub fn create_row(&mut self) -> DataRowWriter {

@@ -248,6 +248,13 @@ impl BackendMessage for RowDescription {
 	}
 }
 
+impl RowDescription {
+	pub fn with_format_code(mut self, format_code: FormatCode) -> Self {
+		self.format_code = format_code;
+		self
+	}
+}
+
 #[derive(Default, Debug)]
 pub struct DataRow {
 	pub values: Vec<Option<Vec<u8>>>,

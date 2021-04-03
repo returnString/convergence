@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement};
+use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
@@ -11,15 +11,10 @@ use tokio_postgres::{connect, NoTls};
 
 struct DataFusionPortal {
 	df: Arc<dyn DataFrame>,
-	format_code: FormatCode,
 }
 
 #[async_trait]
 impl Portal for DataFusionPortal {
-	fn row_desc(&self) -> RowDescription {
-		schema_to_row_desc(&self.df.schema().clone().into(), self.format_code)
-	}
-
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		for arrow_batch in self.df.collect().await.expect("collect failed") {
 			record_batch_to_rows(&arrow_batch, batch);
@@ -44,22 +39,14 @@ impl Engine for DataFusionEngine {
 		Self { ctx }
 	}
 
-	async fn prepare(&mut self, statement: Statement) -> Result<PreparedStatement, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<RowDescription, ErrorResponse> {
 		let plan = self.ctx.sql(&statement.to_string()).expect("sql failed");
-
-		Ok(PreparedStatement {
-			statement,
-			row_desc: schema_to_row_desc(&plan.schema().clone().into(), FormatCode::Text),
-		})
+		Ok(schema_to_row_desc(&plan.schema().clone().into(), FormatCode::Text))
 	}
 
-	async fn create_portal(
-		&mut self,
-		statement: PreparedStatement,
-		format_code: FormatCode,
-	) -> Result<Self::PortalType, ErrorResponse> {
-		let df = self.ctx.sql(&statement.statement.to_string()).expect("sql failed");
-		Ok(DataFusionPortal { df, format_code })
+	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
+		let df = self.ctx.sql(&statement.to_string()).expect("sql failed");
+		Ok(DataFusionPortal { df })
 	}
 }
 

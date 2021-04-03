@@ -1,14 +1,12 @@
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement};
+use convergence::engine::{Engine, Portal};
 use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
 use tokio_postgres::{connect, NoTls, SimpleQueryMessage};
 
-struct ReturnSingleScalarPortal {
-	row_desc: RowDescription,
-}
+struct ReturnSingleScalarPortal;
 
 #[async_trait]
 impl Portal for ReturnSingleScalarPortal {
@@ -16,10 +14,6 @@ impl Portal for ReturnSingleScalarPortal {
 		let mut row = batch.create_row();
 		row.write_int4(1);
 		Ok(())
-	}
-
-	fn row_desc(&self) -> RowDescription {
-		self.row_desc.clone()
 	}
 }
 
@@ -33,7 +27,7 @@ impl Engine for ReturnSingleScalarEngine {
 		Self
 	}
 
-	async fn prepare(&mut self, statement: Statement) -> Result<PreparedStatement, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<RowDescription, ErrorResponse> {
 		if let Statement::Query(query) = &statement {
 			if let SetExpr::Select(select) = &query.body {
 				if select.projection.len() == 1 {
@@ -48,27 +42,17 @@ impl Engine for ReturnSingleScalarEngine {
 			}
 		}
 
-		Ok(PreparedStatement {
-			statement,
-			row_desc: RowDescription {
-				format_code: FormatCode::Text,
-				fields: vec![FieldDescription {
-					name: "test".to_owned(),
-					data_type: DataTypeOid::Int4,
-				}],
-			},
+		Ok(RowDescription {
+			format_code: FormatCode::Text,
+			fields: vec![FieldDescription {
+				name: "test".to_owned(),
+				data_type: DataTypeOid::Int4,
+			}],
 		})
 	}
 
-	async fn create_portal(
-		&mut self,
-		mut statement: PreparedStatement,
-		format_code: FormatCode,
-	) -> Result<Self::PortalType, ErrorResponse> {
-		statement.row_desc.format_code = format_code;
-		Ok(ReturnSingleScalarPortal {
-			row_desc: statement.row_desc,
-		})
+	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
+		Ok(ReturnSingleScalarPortal)
 	}
 }
 

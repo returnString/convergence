@@ -1,4 +1,4 @@
-use crate::engine::{Engine, Portal, PreparedStatement};
+use crate::engine::{Engine, Portal};
 use crate::protocol::*;
 use crate::protocol_ext::DataRowBatch;
 use futures::{SinkExt, StreamExt};
@@ -29,12 +29,23 @@ enum ConnectionState {
 	Idle,
 }
 
+#[derive(Debug, Clone)]
+struct PreparedStatement {
+	pub statement: Statement,
+	pub row_desc: RowDescription,
+}
+
+struct BoundPortal<E: Engine> {
+	pub portal: E::PortalType,
+	pub row_desc: RowDescription,
+}
+
 pub struct Connection<E: Engine, S> {
 	engine: E,
 	framed: Framed<S, ConnectionCodec>,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
-	portals: HashMap<String, E::PortalType>,
+	portals: HashMap<String, BoundPortal<E>>,
 }
 
 impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
@@ -59,14 +70,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
 	}
 
-	fn portal(&self, name: &str) -> Result<&E::PortalType, ConnectionError> {
+	fn portal(&self, name: &str) -> Result<&BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
-	fn portal_mut(&mut self, name: &str) -> Result<&mut E::PortalType, ConnectionError> {
+	fn portal_mut(&mut self, name: &str) -> Result<&mut BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
@@ -104,8 +115,13 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				match self.next().await? {
 					ClientMessage::Parse(parse) => {
 						let statement = Self::parse_statement(&parse.query)?;
-						self.statements
-							.insert(parse.prepared_statement_name, self.engine.prepare(statement).await?);
+						self.statements.insert(
+							parse.prepared_statement_name,
+							PreparedStatement {
+								row_desc: self.engine.prepare(&statement).await?,
+								statement,
+							},
+						);
 						self.framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
@@ -120,10 +136,16 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							}
 						};
 
-						let statement = self.prepared_statement(&bind.prepared_statement_name)?.clone();
-						let portal = self.engine.create_portal(statement, format_code).await?;
+						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
+						let portal = self.engine.create_portal(&prepared.statement).await?;
 
-						self.portals.insert(bind.portal, portal);
+						self.portals.insert(
+							bind.portal,
+							BoundPortal {
+								row_desc: prepared.row_desc.with_format_code(format_code),
+								portal,
+							},
+						);
 						self.framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
@@ -132,18 +154,17 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.framed.send(row_desc).await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
-						let row_desc = self.portal(portal_name)?.row_desc();
+						let row_desc = self.portal(portal_name)?.row_desc.clone();
 						self.framed.send(row_desc).await?;
 					}
 					ClientMessage::Sync => {
 						self.framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Execute(exec) => {
-						let portal = self.portal_mut(&exec.portal)?;
+						let bound = self.portal_mut(&exec.portal)?;
 
-						let row_desc = portal.row_desc();
-						let mut batch_writer = DataRowBatch::new(row_desc.format_code, row_desc.fields.len());
-						portal.fetch(&mut batch_writer).await?;
+						let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
+						bound.portal.fetch(&mut batch_writer).await?;
 						let num_rows = batch_writer.num_rows();
 
 						self.framed.send(batch_writer).await?;
@@ -156,14 +177,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					}
 					ClientMessage::Query(query) => {
 						let parsed = Self::parse_statement(&query)?;
-						let statement = self.engine.prepare(parsed).await?;
-						let mut portal = self.engine.create_portal(statement, FormatCode::Text).await?;
+						let row_desc = self.engine.prepare(&parsed).await?;
+						let mut portal = self.engine.create_portal(&parsed).await?;
 
-						let mut batch_writer = DataRowBatch::new(FormatCode::Text, portal.row_desc().fields.len());
+						let mut batch_writer = DataRowBatch::from_row_desc(&row_desc);
 						portal.fetch(&mut batch_writer).await?;
 						let num_rows = batch_writer.num_rows();
 
-						self.framed.send(portal.row_desc()).await?;
+						self.framed.send(row_desc).await?;
 						self.framed.send(batch_writer).await?;
 
 						self.framed

@@ -2,7 +2,7 @@ use arrow::array::{ArrayRef, Float32Array, Int32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
-use convergence::engine::{Engine, Portal, PreparedStatement};
+use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
@@ -20,10 +20,6 @@ impl Portal for ArrowPortal {
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		record_batch_to_rows(&self.batch, batch);
 		Ok(())
-	}
-
-	fn row_desc(&self) -> RowDescription {
-		schema_to_row_desc(&self.batch.schema(), FormatCode::Binary)
 	}
 }
 
@@ -52,14 +48,11 @@ impl Engine for ArrowEngine {
 		}
 	}
 
-	async fn prepare(&mut self, statement: Statement) -> Result<PreparedStatement, ErrorResponse> {
-		Ok(PreparedStatement {
-			statement,
-			row_desc: schema_to_row_desc(&self.batch.schema(), FormatCode::Text),
-		})
+	async fn prepare(&mut self, _: &Statement) -> Result<RowDescription, ErrorResponse> {
+		Ok(schema_to_row_desc(&self.batch.schema(), FormatCode::Text))
 	}
 
-	async fn create_portal(&mut self, _: PreparedStatement, _: FormatCode) -> Result<Self::PortalType, ErrorResponse> {
+	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
 		Ok(ArrowPortal {
 			batch: self.batch.clone(),
 		})
