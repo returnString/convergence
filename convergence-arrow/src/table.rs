@@ -1,10 +1,10 @@
 use arrow::array::{
-	Date32Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray, UInt16Array,
+	Date32Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
+	TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array,
 	UInt32Array, UInt64Array, UInt8Array,
 };
-use arrow::datatypes::{DataType, Schema};
+use arrow::datatypes::{DataType, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
-use chrono::{Duration, NaiveDate};
 use convergence::protocol::{DataTypeOid, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 
@@ -15,8 +15,11 @@ macro_rules! array_cast {
 }
 
 macro_rules! array_val {
+	($arrtype: ident, $arr: expr, $idx: expr, $func: ident) => {
+		array_cast!($arrtype, $arr).$func($idx)
+	};
 	($arrtype: ident, $arr: expr, $idx: expr) => {
-		array_cast!($arrtype, $arr).value($idx)
+		array_val!($arrtype, $arr, $idx, value)
 	};
 }
 
@@ -41,10 +44,23 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 					DataType::Float64 => row.write_float8(array_val!(Float64Array, col, row_idx)),
 					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
 					DataType::Date32 => {
-						let date = NaiveDate::from_ymd(1970, 1, 1)
-							+ Duration::days(array_val!(Date32Array, col, row_idx) as i64);
-						row.write_date(date);
+						row.write_date(array_val!(Date32Array, col, row_idx, value_as_date).expect("invalid date"))
 					}
+					DataType::Timestamp(unit, None) => row.write_timestamp(
+						match unit {
+							TimeUnit::Second => array_val!(TimestampSecondArray, col, row_idx, value_as_datetime),
+							TimeUnit::Millisecond => {
+								array_val!(TimestampMillisecondArray, col, row_idx, value_as_datetime)
+							}
+							TimeUnit::Microsecond => {
+								array_val!(TimestampMicrosecondArray, col, row_idx, value_as_datetime)
+							}
+							TimeUnit::Nanosecond => {
+								array_val!(TimestampNanosecondArray, col, row_idx, value_as_datetime)
+							}
+						}
+						.expect("invalid timestamp"),
+					),
 					_ => unimplemented!(),
 				};
 			}
@@ -66,6 +82,7 @@ pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 		DataType::Float64 => DataTypeOid::Float8,
 		DataType::Utf8 => DataTypeOid::Text,
 		DataType::Date32 => DataTypeOid::Date,
+		DataType::Timestamp(_, None) => DataTypeOid::Timestamp,
 		other => unimplemented!("arrow to pg conversion not implemented: {}", other),
 	}
 }

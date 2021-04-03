@@ -16,5 +16,5 @@ convergence = { path = "../convergence", version = "0.1" }
 chrono = "0.4"
 
 [dev-dependencies]
-tokio-postgres = "0.7"
+tokio-postgres = { version =  "0.7", features = [ "with-chrono-0_4" ] }
 datafusion = { git = "https://github.com/apache/arrow" }
