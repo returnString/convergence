@@ -32,7 +32,7 @@ enum ConnectionState {
 #[derive(Debug, Clone)]
 struct PreparedStatement {
 	pub statement: Statement,
-	pub row_desc: RowDescription,
+	pub fields: Vec<FieldDescription>,
 }
 
 struct BoundPortal<E: Engine> {
@@ -118,7 +118,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						self.statements.insert(
 							parse.prepared_statement_name,
 							PreparedStatement {
-								row_desc: self.engine.prepare(&statement).await?,
+								fields: self.engine.prepare(&statement).await?,
 								statement,
 							},
 						);
@@ -138,20 +138,23 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
 						let portal = self.engine.create_portal(&prepared.statement).await?;
+						let row_desc = RowDescription {
+							fields: prepared.fields.clone(),
+							format_code,
+						};
 
-						self.portals.insert(
-							bind.portal,
-							BoundPortal {
-								row_desc: prepared.row_desc.with_format_code(format_code),
-								portal,
-							},
-						);
+						self.portals.insert(bind.portal, BoundPortal { portal, row_desc });
 						self.framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						let row_desc = self.prepared_statement(statement_name)?.row_desc.clone();
+						let fields = self.prepared_statement(statement_name)?.fields.clone();
 						self.framed.send(ParameterDescription {}).await?;
-						self.framed.send(row_desc).await?;
+						self.framed
+							.send(RowDescription {
+								fields,
+								format_code: FormatCode::Text,
+							})
+							.await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
 						let row_desc = self.portal(portal_name)?.row_desc.clone();
@@ -177,7 +180,11 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					}
 					ClientMessage::Query(query) => {
 						let parsed = Self::parse_statement(&query)?;
-						let row_desc = self.engine.prepare(&parsed).await?;
+						let fields = self.engine.prepare(&parsed).await?;
+						let row_desc = RowDescription {
+							fields,
+							format_code: FormatCode::Text,
+						};
 						let mut portal = self.engine.create_portal(&parsed).await?;
 
 						let mut batch_writer = DataRowBatch::from_row_desc(&row_desc);

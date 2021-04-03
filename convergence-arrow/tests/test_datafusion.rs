@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
+use convergence::protocol::{ErrorResponse, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
-use convergence_arrow::table::{record_batch_to_rows, schema_to_row_desc};
+use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
 use datafusion::prelude::*;
 use sqlparser::ast::Statement;
 use std::sync::Arc;
@@ -39,9 +39,9 @@ impl Engine for DataFusionEngine {
 		Self { ctx }
 	}
 
-	async fn prepare(&mut self, statement: &Statement) -> Result<RowDescription, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		let plan = self.ctx.sql(&statement.to_string()).expect("sql failed");
-		Ok(schema_to_row_desc(&plan.schema().clone().into(), FormatCode::Text))
+		Ok(schema_to_field_desc(&plan.schema().clone().into()))
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {

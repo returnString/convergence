@@ -1,4 +1,4 @@
-use crate::protocol::{ErrorResponse, RowDescription};
+use crate::protocol::{ErrorResponse, FieldDescription};
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use sqlparser::ast::Statement;
@@ -14,6 +14,6 @@ pub trait Engine: Send + Sync {
 
 	async fn new() -> Self;
 
-	async fn prepare(&mut self, stmt: &Statement) -> Result<RowDescription, ErrorResponse>;
+	async fn prepare(&mut self, stmt: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse>;
 	async fn create_portal(&mut self, stmt: &Statement) -> Result<Self::PortalType, ErrorResponse>;
 }

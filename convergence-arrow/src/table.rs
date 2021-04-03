@@ -4,7 +4,7 @@ use arrow::array::{
 };
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
-use convergence::protocol::{DataTypeOid, FieldDescription, FormatCode, RowDescription};
+use convergence::protocol::{DataTypeOid, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 
 macro_rules! array_cast {
@@ -63,15 +63,13 @@ pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 	}
 }
 
-pub fn schema_to_row_desc(schema: &Schema, format_code: FormatCode) -> RowDescription {
-	let fields = schema
+pub fn schema_to_field_desc(schema: &Schema) -> Vec<FieldDescription> {
+	schema
 		.fields()
 		.iter()
 		.map(|f| FieldDescription {
 			name: f.name().clone(),
 			data_type: data_type_to_oid(f.data_type()),
 		})
-		.collect();
-
-	RowDescription { fields, format_code }
+		.collect()
 }

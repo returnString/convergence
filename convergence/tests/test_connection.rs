@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, FormatCode, RowDescription, SqlState};
+use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
@@ -27,7 +27,7 @@ impl Engine for ReturnSingleScalarEngine {
 		Self
 	}
 
-	async fn prepare(&mut self, statement: &Statement) -> Result<RowDescription, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		if let Statement::Query(query) = &statement {
 			if let SetExpr::Select(select) = &query.body {
 				if select.projection.len() == 1 {
@@ -42,13 +42,10 @@ impl Engine for ReturnSingleScalarEngine {
 			}
 		}
 
-		Ok(RowDescription {
-			format_code: FormatCode::Text,
-			fields: vec![FieldDescription {
-				name: "test".to_owned(),
-				data_type: DataTypeOid::Int4,
-			}],
-		})
+		Ok(vec![FieldDescription {
+			name: "test".to_owned(),
+			data_type: DataTypeOid::Int4,
+		}])
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {

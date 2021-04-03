@@ -3,10 +3,10 @@ use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{ErrorResponse, FormatCode, RowDescription};
+use convergence::protocol::{ErrorResponse, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
-use convergence_arrow::table::{record_batch_to_rows, schema_to_row_desc};
+use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
 use sqlparser::ast::Statement;
 use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
@@ -48,8 +48,8 @@ impl Engine for ArrowEngine {
 		}
 	}
 
-	async fn prepare(&mut self, _: &Statement) -> Result<RowDescription, ErrorResponse> {
-		Ok(schema_to_row_desc(&self.batch.schema(), FormatCode::Text))
+	async fn prepare(&mut self, _: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
+		Ok(schema_to_field_desc(&self.batch.schema()))
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
