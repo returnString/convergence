@@ -13,6 +13,7 @@ sqlparser = "0.9"
 async-trait = "0.1"
 arrow = { git = "https://github.com/apache/arrow" }
 convergence = { path = "../convergence", version = "0.1" }
+chrono = "0.4"
 
 [dev-dependencies]
 tokio-postgres = "0.7"

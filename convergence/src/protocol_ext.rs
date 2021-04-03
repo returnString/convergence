@@ -1,5 +1,6 @@
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
+use chrono::NaiveDate;
 use tokio_util::codec::Encoder;
 
 pub struct DataRowBatch {
@@ -64,11 +65,23 @@ impl<'a> DataRowWriter<'a> {
 	}
 
 	pub fn write_null(&mut self) {
+		self.current_col += 1;
 		self.parent.row.put_i32(-1);
 	}
 
 	pub fn write_string(&mut self, val: &str) {
 		self.write_value(val.as_bytes());
+	}
+
+	fn pg_date_epoch() -> NaiveDate {
+		NaiveDate::from_ymd(2000, 1, 1)
+	}
+
+	pub fn write_date(&mut self, val: NaiveDate) {
+		match self.parent.format_code {
+			FormatCode::Binary => self.write_int4(val.signed_duration_since(Self::pg_date_epoch()).num_days() as i32),
+			FormatCode::Text => self.write_string(&val.to_string()),
+		}
 	}
 
 	primitive_write!(write_int2, i16);

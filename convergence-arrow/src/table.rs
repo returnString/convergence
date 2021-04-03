@@ -1,9 +1,10 @@
 use arrow::array::{
-	Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray, UInt16Array, UInt32Array,
-	UInt64Array, UInt8Array,
+	Date32Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray, UInt16Array,
+	UInt32Array, UInt64Array, UInt8Array,
 };
 use arrow::datatypes::{DataType, Schema};
 use arrow::record_batch::RecordBatch;
+use chrono::{Duration, NaiveDate};
 use convergence::protocol::{DataTypeOid, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 
@@ -39,6 +40,11 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 					DataType::Float32 => row.write_float4(array_val!(Float32Array, col, row_idx)),
 					DataType::Float64 => row.write_float8(array_val!(Float64Array, col, row_idx)),
 					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
+					DataType::Date32 => {
+						let date = NaiveDate::from_ymd(1970, 1, 1)
+							+ Duration::days(array_val!(Date32Array, col, row_idx) as i64);
+						row.write_date(date);
+					}
 					_ => unimplemented!(),
 				};
 			}
@@ -59,6 +65,7 @@ pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 		DataType::Float32 => DataTypeOid::Float4,
 		DataType::Float64 => DataTypeOid::Float8,
 		DataType::Utf8 => DataTypeOid::Text,
+		DataType::Date32 => DataTypeOid::Date,
 		other => unimplemented!("arrow to pg conversion not implemented: {}", other),
 	}
 }

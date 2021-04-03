@@ -60,6 +60,8 @@ data_types! {
 	Float4 = 700, 4
 	Float8 = 701, 8
 
+	Date = 1082, 4
+
 	Text = 25, -1
 }
 
