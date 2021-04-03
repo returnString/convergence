@@ -32,8 +32,8 @@ impl DataRowBatch {
 }
 
 macro_rules! primitive_write {
-	($type: ident) => {
-		pub fn $type(&mut self, val: $type) {
+	($name: ident, $type: ident) => {
+		pub fn $name(&mut self, val: $type) {
 			match self.parent.format_code {
 				FormatCode::Text => self.write_value(&val.to_string().into_bytes()),
 				FormatCode::Binary => self.write_value(&val.to_be_bytes()),
@@ -59,19 +59,19 @@ impl<'a> DataRowWriter<'a> {
 		self.parent.row.put_slice(data);
 	}
 
-	pub fn null(&mut self) {
+	pub fn write_null(&mut self) {
 		self.parent.row.put_i32(-1);
 	}
 
-	pub fn string(&mut self, val: &str) {
+	pub fn write_string(&mut self, val: &str) {
 		self.write_value(val.as_bytes());
 	}
 
-	primitive_write!(i16);
-	primitive_write!(i32);
-	primitive_write!(i64);
-	primitive_write!(f32);
-	primitive_write!(f64);
+	primitive_write!(write_int2, i16);
+	primitive_write!(write_int4, i32);
+	primitive_write!(write_int8, i64);
+	primitive_write!(write_float4, f32);
+	primitive_write!(write_float8, f64);
 }
 
 impl<'a> Drop for DataRowWriter<'a> {

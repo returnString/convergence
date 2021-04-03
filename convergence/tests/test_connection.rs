@@ -14,7 +14,7 @@ struct ReturnSingleScalarPortal {
 impl Portal for ReturnSingleScalarPortal {
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		let mut row = batch.create_row();
-		row.i32(1);
+		row.write_int4(1);
 		Ok(())
 	}
 

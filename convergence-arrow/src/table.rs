@@ -25,20 +25,20 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 		for col_idx in 0..arrow_batch.num_columns() {
 			let col = arrow_batch.column(col_idx);
 			if col.is_null(row_idx) {
-				row.null();
+				row.write_null();
 			} else {
 				match col.data_type() {
-					DataType::Int8 => row.i16(array_val!(Int8Array, col, row_idx) as i16),
-					DataType::Int16 => row.i16(array_val!(Int16Array, col, row_idx)),
-					DataType::Int32 => row.i32(array_val!(Int32Array, col, row_idx)),
-					DataType::Int64 => row.i64(array_val!(Int64Array, col, row_idx)),
-					DataType::UInt8 => row.i16(array_val!(UInt8Array, col, row_idx) as i16),
-					DataType::UInt16 => row.i16(array_val!(UInt16Array, col, row_idx) as i16),
-					DataType::UInt32 => row.i32(array_val!(UInt32Array, col, row_idx) as i32),
-					DataType::UInt64 => row.i64(array_val!(UInt64Array, col, row_idx) as i64),
-					DataType::Float32 => row.f32(array_val!(Float32Array, col, row_idx)),
-					DataType::Float64 => row.f64(array_val!(Float64Array, col, row_idx)),
-					DataType::Utf8 => row.string(array_val!(StringArray, col, row_idx)),
+					DataType::Int8 => row.write_int2(array_val!(Int8Array, col, row_idx) as i16),
+					DataType::Int16 => row.write_int2(array_val!(Int16Array, col, row_idx)),
+					DataType::Int32 => row.write_int4(array_val!(Int32Array, col, row_idx)),
+					DataType::Int64 => row.write_int8(array_val!(Int64Array, col, row_idx)),
+					DataType::UInt8 => row.write_int2(array_val!(UInt8Array, col, row_idx) as i16),
+					DataType::UInt16 => row.write_int2(array_val!(UInt16Array, col, row_idx) as i16),
+					DataType::UInt32 => row.write_int4(array_val!(UInt32Array, col, row_idx) as i32),
+					DataType::UInt64 => row.write_int8(array_val!(UInt64Array, col, row_idx) as i64),
+					DataType::Float32 => row.write_float4(array_val!(Float32Array, col, row_idx)),
+					DataType::Float64 => row.write_float8(array_val!(Float64Array, col, row_idx)),
+					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
 					_ => unimplemented!(),
 				};
 			}
