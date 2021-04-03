@@ -108,6 +108,9 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				}
 
 				self.framed.send(AuthenticationOk).await?;
+				self.framed
+					.send(ParameterStatus::new("client_encoding", "UTF8"))
+					.await?;
 				self.framed.send(ReadyForQuery).await?;
 				Ok(ConnectionState::Idle)
 			}
