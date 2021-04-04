@@ -112,9 +112,20 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				}
 
 				self.framed.send(AuthenticationOk).await?;
-				self.framed
-					.send(ParameterStatus::new("client_encoding", "UTF8"))
-					.await?;
+
+				let param_statuses = &[
+					("server_version", "13"),
+					("server_encoding", "UTF8"),
+					("client_encoding", "UTF8"),
+					("DateStyle", "ISO"),
+					("TimeZone", "UTC"),
+					("integer_datetimes", "on"),
+				];
+
+				for &(param, status) in param_statuses {
+					self.framed.send(ParameterStatus::new(param, status)).await?;
+				}
+
 				self.framed.send(ReadyForQuery).await?;
 				Ok(Some(ConnectionState::Idle))
 			}
