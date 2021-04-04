@@ -208,12 +208,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 									command_tag: format!("SELECT {}", num_rows),
 								})
 								.await?;
-						} else {
-							self.framed
-								.send(CommandComplete {
-									command_tag: "SET".to_string(),
-								})
-								.await?;
 						}
 						self.framed.send(ReadyForQuery).await?;
 					}

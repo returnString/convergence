@@ -106,3 +106,12 @@ async fn error_handling() {
 
 	assert_eq!(err.code().unwrap().code(), SqlState::DATA_EXCEPTION.0);
 }
+
+#[tokio::test]
+async fn set_variable_noop() {
+	let client = setup().await;
+	client
+		.simple_query("set somevar to 'my_val'")
+		.await
+		.expect("failed to set var");
+}
