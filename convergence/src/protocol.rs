@@ -302,6 +302,15 @@ impl BackendMessage for NoData {
 }
 
 #[derive(Debug)]
+pub struct EmptyQueryResponse;
+
+impl BackendMessage for EmptyQueryResponse {
+	const TAG: u8 = b'I';
+
+	fn encode(&self, _dst: &mut BytesMut) {}
+}
+
+#[derive(Debug)]
 pub struct CommandComplete {
 	pub command_tag: String,
 }

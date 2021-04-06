@@ -115,3 +115,15 @@ async fn set_variable_noop() {
 		.await
 		.expect("failed to set var");
 }
+
+#[tokio::test]
+async fn empty_simple_query() {
+	let client = setup().await;
+	client.simple_query("").await.unwrap();
+}
+
+#[tokio::test]
+async fn empty_extended_query() {
+	let client = setup().await;
+	client.query("", &[]).await.unwrap();
+}

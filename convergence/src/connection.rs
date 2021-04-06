@@ -203,7 +203,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 								.await?;
 						}
 						None => {
-							framed.send(NoData).await?;
+							framed.send(EmptyQueryResponse).await?;
 						}
 					},
 					ClientMessage::Query(query) => {
@@ -228,7 +228,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 								})
 								.await?;
 						} else {
-							framed.send(NoData).await?;
+							framed.send(EmptyQueryResponse).await?;
 						}
 						framed.send(ReadyForQuery).await?;
 					}
