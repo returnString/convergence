@@ -35,8 +35,8 @@ pub async fn run_with_listener<E: Engine>(listener: TcpListener) -> Result<(), C
 	loop {
 		let (stream, _) = listener.accept().await?;
 		tokio::spawn(async move {
-			let mut conn = Connection::new(stream, E::new().await);
-			conn.run().await.unwrap();
+			let mut conn = Connection::new(E::new().await);
+			conn.run(stream).await.unwrap();
 		});
 	}
 }

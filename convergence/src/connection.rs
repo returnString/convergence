@@ -42,25 +42,21 @@ struct BoundPortal<E: Engine> {
 
 pub struct Connection<E: Engine, S> {
 	engine: E,
-	framed: Framed<S, ConnectionCodec>,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
 	portals: HashMap<String, Option<BoundPortal<E>>>,
+	_marker: std::marker::PhantomData<S>,
 }
 
 impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
-	pub fn new(stream: S, engine: E) -> Self {
+	pub fn new(engine: E) -> Self {
 		Self {
-			framed: Framed::new(stream, ConnectionCodec::new()),
 			state: ConnectionState::Startup,
 			statements: HashMap::new(),
 			portals: HashMap::new(),
 			engine,
+			_marker: std::marker::PhantomData,
 		}
-	}
-
-	async fn next(&mut self) -> Result<ClientMessage, ConnectionError> {
-		Ok(self.framed.next().await.ok_or(ConnectionError::ConnectionClosed)??)
 	}
 
 	fn prepared_statement(&self, name: &str) -> Result<&PreparedStatement, ConnectionError> {
@@ -93,10 +89,13 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 		}
 	}
 
-	async fn step(&mut self) -> Result<Option<ConnectionState>, ConnectionError> {
+	async fn step(
+		&mut self,
+		framed: &mut Framed<S, ConnectionCodec>,
+	) -> Result<Option<ConnectionState>, ConnectionError> {
 		match self.state {
 			ConnectionState::Startup => {
-				match self.next().await? {
+				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Startup(_startup) => {
 						// do startup stuff
 					}
@@ -107,7 +106,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					}
 				}
 
-				self.framed.send(AuthenticationOk).await?;
+				framed.send(AuthenticationOk).await?;
 
 				let param_statuses = &[
 					("server_version", "13"),
@@ -119,14 +118,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 				];
 
 				for &(param, status) in param_statuses {
-					self.framed.send(ParameterStatus::new(param, status)).await?;
+					framed.send(ParameterStatus::new(param, status)).await?;
 				}
 
-				self.framed.send(ReadyForQuery).await?;
+				framed.send(ReadyForQuery).await?;
 				Ok(Some(ConnectionState::Idle))
 			}
 			ConnectionState::Idle => {
-				match self.next().await? {
+				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
 						let parsed_statement = self.parse_statement(&parse.query)?;
 
@@ -140,7 +139,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 								statement: parsed_statement,
 							},
 						);
-						self.framed.send(ParseComplete).await?;
+						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
 						let format_code = match bind.result_format {
@@ -170,12 +169,12 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 						self.portals.insert(bind.portal, portal);
 
-						self.framed.send(BindComplete).await?;
+						framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
 						let fields = self.prepared_statement(statement_name)?.fields.clone();
-						self.framed.send(ParameterDescription {}).await?;
-						self.framed
+						framed.send(ParameterDescription {}).await?;
+						framed
 							.send(RowDescription {
 								fields,
 								format_code: FormatCode::Text,
@@ -183,11 +182,11 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							.await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => self.framed.send(portal.row_desc.clone()).await?,
-						None => self.framed.send(NoData).await?,
+						Some(portal) => framed.send(portal.row_desc.clone()).await?,
+						None => framed.send(NoData).await?,
 					},
 					ClientMessage::Sync => {
-						self.framed.send(ReadyForQuery).await?;
+						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
 						Some(bound) => {
@@ -195,16 +194,16 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							bound.portal.fetch(&mut batch_writer).await?;
 							let num_rows = batch_writer.num_rows();
 
-							self.framed.send(batch_writer).await?;
+							framed.send(batch_writer).await?;
 
-							self.framed
+							framed
 								.send(CommandComplete {
 									command_tag: format!("SELECT {}", num_rows),
 								})
 								.await?;
 						}
 						None => {
-							self.framed.send(NoData).await?;
+							framed.send(NoData).await?;
 						}
 					},
 					ClientMessage::Query(query) => {
@@ -220,18 +219,18 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							portal.fetch(&mut batch_writer).await?;
 							let num_rows = batch_writer.num_rows();
 
-							self.framed.send(row_desc).await?;
-							self.framed.send(batch_writer).await?;
+							framed.send(row_desc).await?;
+							framed.send(batch_writer).await?;
 
-							self.framed
+							framed
 								.send(CommandComplete {
 									command_tag: format!("SELECT {}", num_rows),
 								})
 								.await?;
 						} else {
-							self.framed.send(NoData).await?;
+							framed.send(NoData).await?;
 						}
-						self.framed.send(ReadyForQuery).await?;
+						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
 					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
@@ -242,13 +241,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 		}
 	}
 
-	pub async fn run(&mut self) -> Result<(), ConnectionError> {
+	pub async fn run(&mut self, stream: S) -> Result<(), ConnectionError> {
+		let mut framed = Framed::new(stream, ConnectionCodec::new());
 		loop {
-			let new_state = match self.step().await {
+			let new_state = match self.step(&mut framed).await {
 				Ok(Some(state)) => state,
 				Ok(None) => return Ok(()),
 				Err(ConnectionError::ErrorResponse(err_info)) => {
-					self.framed.send(err_info.clone()).await?;
+					framed.send(err_info.clone()).await?;
 
 					if err_info.severity == Severity::FATAL {
 						return Err(err_info.into());
@@ -257,7 +257,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 					ConnectionState::Idle
 				}
 				Err(err) => {
-					self.framed
+					framed
 						.send(ErrorResponse::fatal(SqlState::CONNECTION_EXCEPTION, "connection error"))
 						.await?;
 					return Err(err);
