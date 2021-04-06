@@ -4,7 +4,7 @@ use crate::protocol_ext::DataRowBatch;
 use futures::{SinkExt, StreamExt};
 use sqlparser::ast::Statement;
 use sqlparser::dialect::PostgreSqlDialect;
-use sqlparser::parser::{Parser, ParserError};
+use sqlparser::parser::Parser;
 use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
@@ -15,8 +15,6 @@ pub enum ConnectionError {
 	Io(#[from] std::io::Error),
 	#[error("protocol error: {0}")]
 	Protocol(#[from] ProtocolError),
-	#[error("parser error: {0}")]
-	Parser(#[from] ParserError),
 	#[error("error response: {0}")]
 	ErrorResponse(#[from] ErrorResponse),
 	#[error("connection closed")]
@@ -80,12 +78,17 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
-	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ConnectionError> {
-		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)?;
+	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ErrorResponse> {
+		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)
+			.map_err(|err| ErrorResponse::error(SqlState::SYNTAX_ERROR, err.to_string()))?;
+
 		match statements.len() {
 			0 => Ok(None),
 			1 => Ok(Some(statements[0].clone())),
-			_ => Err(ErrorResponse::error(SqlState::SYNTAX_ERROR, "expected zero or one statements").into()),
+			_ => Err(ErrorResponse::error(
+				SqlState::SYNTAX_ERROR,
+				"expected zero or one statements",
+			)),
 		}
 	}
 
