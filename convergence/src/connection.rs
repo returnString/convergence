@@ -31,7 +31,7 @@ enum ConnectionState {
 
 #[derive(Debug, Clone)]
 struct PreparedStatement {
-	pub statement: Statement,
+	pub statement: Option<Statement>,
 	pub fields: Vec<FieldDescription>,
 }
 
@@ -45,7 +45,7 @@ pub struct Connection<E: Engine, S> {
 	framed: Framed<S, ConnectionCodec>,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
-	portals: HashMap<String, BoundPortal<E>>,
+	portals: HashMap<String, Option<BoundPortal<E>>>,
 }
 
 impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
@@ -70,14 +70,14 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
 	}
 
-	fn portal(&self, name: &str) -> Result<&BoundPortal<E>, ConnectionError> {
+	fn portal(&self, name: &str) -> Result<&Option<BoundPortal<E>>, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
 			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
 	}
 
-	fn portal_mut(&mut self, name: &str) -> Result<&mut BoundPortal<E>, ConnectionError> {
+	fn portal_mut(&mut self, name: &str) -> Result<&mut Option<BoundPortal<E>>, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
@@ -86,14 +86,10 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ConnectionError> {
 		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)?;
-		if statements.len() != 1 {
-			Err(ErrorResponse::error(SqlState::SYNTAX_ERROR, "expected exactly one statement").into())
-		} else {
-			let statement = &statements[0];
-			Ok(match statement {
-				Statement::SetVariable { .. } => None,
-				other => Some(other.clone()),
-			})
+		match statements.len() {
+			0 => Ok(None),
+			1 => Ok(Some(statements[0].clone())),
+			_ => Err(ErrorResponse::error(SqlState::SYNTAX_ERROR, "expected zero or one statements").into()),
 		}
 	}
 
@@ -132,14 +128,16 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			ConnectionState::Idle => {
 				match self.next().await? {
 					ClientMessage::Parse(parse) => {
-						let statement = self.parse_statement(&parse.query)?.ok_or_else(|| {
-							ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "invalid statement for parsing")
-						})?;
+						let parsed_statement = self.parse_statement(&parse.query)?;
+
 						self.statements.insert(
 							parse.prepared_statement_name,
 							PreparedStatement {
-								fields: self.engine.prepare(&statement).await?,
-								statement,
+								fields: match &parsed_statement {
+									Some(statement) => self.engine.prepare(&statement).await?,
+									None => vec![],
+								},
+								statement: parsed_statement,
 							},
 						);
 						self.framed.send(ParseComplete).await?;
@@ -157,13 +155,21 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 						};
 
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
-						let portal = self.engine.create_portal(&prepared.statement).await?;
-						let row_desc = RowDescription {
-							fields: prepared.fields.clone(),
-							format_code,
+						let portal = match prepared.statement {
+							Some(statement) => {
+								let portal = self.engine.create_portal(&statement).await?;
+								let row_desc = RowDescription {
+									fields: prepared.fields.clone(),
+									format_code,
+								};
+
+								Some(BoundPortal { portal, row_desc })
+							}
+							None => None,
 						};
 
-						self.portals.insert(bind.portal, BoundPortal { portal, row_desc });
+						self.portals.insert(bind.portal, portal);
+
 						self.framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
@@ -176,28 +182,31 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							})
 							.await?;
 					}
-					ClientMessage::Describe(Describe::Portal(ref portal_name)) => {
-						let row_desc = self.portal(portal_name)?.row_desc.clone();
-						self.framed.send(row_desc).await?;
-					}
+					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
+						Some(portal) => self.framed.send(portal.row_desc.clone()).await?,
+						None => self.framed.send(NoData).await?,
+					},
 					ClientMessage::Sync => {
 						self.framed.send(ReadyForQuery).await?;
 					}
-					ClientMessage::Execute(exec) => {
-						let bound = self.portal_mut(&exec.portal)?;
+					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
+						Some(bound) => {
+							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
+							bound.portal.fetch(&mut batch_writer).await?;
+							let num_rows = batch_writer.num_rows();
 
-						let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
-						bound.portal.fetch(&mut batch_writer).await?;
-						let num_rows = batch_writer.num_rows();
+							self.framed.send(batch_writer).await?;
 
-						self.framed.send(batch_writer).await?;
-
-						self.framed
-							.send(CommandComplete {
-								command_tag: format!("SELECT {}", num_rows),
-							})
-							.await?;
-					}
+							self.framed
+								.send(CommandComplete {
+									command_tag: format!("SELECT {}", num_rows),
+								})
+								.await?;
+						}
+						None => {
+							self.framed.send(NoData).await?;
+						}
+					},
 					ClientMessage::Query(query) => {
 						if let Some(parsed) = self.parse_statement(&query)? {
 							let fields = self.engine.prepare(&parsed).await?;
@@ -219,6 +228,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 									command_tag: format!("SELECT {}", num_rows),
 								})
 								.await?;
+						} else {
+							self.framed.send(NoData).await?;
 						}
 						self.framed.send(ReadyForQuery).await?;
 					}

@@ -293,6 +293,15 @@ impl BackendMessage for BindComplete {
 }
 
 #[derive(Debug)]
+pub struct NoData;
+
+impl BackendMessage for NoData {
+	const TAG: u8 = b'n';
+
+	fn encode(&self, _dst: &mut BytesMut) {}
+}
+
+#[derive(Debug)]
 pub struct CommandComplete {
 	pub command_tag: String,
 }
