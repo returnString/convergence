@@ -67,7 +67,7 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 [[package]]
 name = "arrow"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#6db1183a947a656919c3e1cfdfb1cab8c6c194fe"
+source = "git+https://github.com/apache/arrow#5554c54e534c6c19796a7b2091ac0d3687784c53"
 dependencies = [
  "cfg_aliases",
  "chrono",
@@ -260,7 +260,7 @@ dependencies = [
  "bytes",
  "chrono",
  "futures",
- "sqlparser 0.9.0",
+ "sqlparser",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -276,7 +276,7 @@ dependencies = [
  "chrono",
  "convergence",
  "datafusion",
- "sqlparser 0.9.0",
+ "sqlparser",
  "tokio",
  "tokio-postgres",
 ]
@@ -342,7 +342,7 @@ dependencies = [
 [[package]]
 name = "datafusion"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#6db1183a947a656919c3e1cfdfb1cab8c6c194fe"
+source = "git+https://github.com/apache/arrow#5554c54e534c6c19796a7b2091ac0d3687784c53"
 dependencies = [
  "ahash",
  "arrow",
@@ -363,7 +363,7 @@ dependencies = [
  "rustyline",
  "sha2",
  "smallvec",
- "sqlparser 0.8.0",
+ "sqlparser",
  "tokio",
  "tokio-stream",
  "unicode-segmentation",
@@ -942,7 +942,7 @@ dependencies = [
 [[package]]
 name = "parquet"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#6db1183a947a656919c3e1cfdfb1cab8c6c194fe"
+source = "git+https://github.com/apache/arrow#5554c54e534c6c19796a7b2091ac0d3687784c53"
 dependencies = [
  "arrow",
  "base64 0.12.3",
@@ -1351,15 +1351,6 @@ checksum = "9e3dfc207c526015c632472a77be09cf1b6e46866581aecae5cc38fb4235dea2"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "sqlparser"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b929a9577d01ee7cddb820696ed536868d81557d3c14363a7514d71add1d058"
-dependencies = [
- "log",
 ]
 
 [[package]]
