@@ -19,8 +19,7 @@ struct ArrowPortal {
 #[async_trait]
 impl Portal for ArrowPortal {
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
-		record_batch_to_rows(&self.batch, batch);
-		Ok(())
+		record_batch_to_rows(&self.batch, batch)
 	}
 }
 
@@ -57,7 +56,7 @@ impl Engine for ArrowEngine {
 	}
 
 	async fn prepare(&mut self, _: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
-		Ok(schema_to_field_desc(&self.batch.schema()))
+		schema_to_field_desc(&self.batch.schema())
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {

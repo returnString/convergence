@@ -152,6 +152,7 @@ impl SqlState {
 	pub const DATA_EXCEPTION: SqlState = SqlState("22000");
 	pub const PROTOCOL_VIOLATION: SqlState = SqlState("08P01");
 	pub const SYNTAX_ERROR: SqlState = SqlState("42601");
+	pub const INVALID_DATETIME_FORMAT: SqlState = SqlState("22007");
 }
 
 #[derive(Debug, Clone, PartialEq)]

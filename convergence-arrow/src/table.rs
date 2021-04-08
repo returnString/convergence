@@ -5,7 +5,7 @@ use arrow::array::{
 };
 use arrow::datatypes::{DataType, Schema, TimeUnit};
 use arrow::record_batch::RecordBatch;
-use convergence::protocol::{DataTypeOid, FieldDescription};
+use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 
 macro_rules! array_cast {
@@ -23,7 +23,7 @@ macro_rules! array_val {
 	};
 }
 
-pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBatch) {
+pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 	for row_idx in 0..arrow_batch.num_rows() {
 		let mut row = pg_batch.create_row();
 		for col_idx in 0..arrow_batch.num_columns() {
@@ -44,7 +44,9 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 					DataType::Float64 => row.write_float8(array_val!(Float64Array, col, row_idx)),
 					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
 					DataType::Date32 => {
-						row.write_date(array_val!(Date32Array, col, row_idx, value_as_date).expect("invalid date"))
+						row.write_date(array_val!(Date32Array, col, row_idx, value_as_date).ok_or_else(|| {
+							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported date type")
+						})?)
 					}
 					DataType::Timestamp(unit, None) => row.write_timestamp(
 						match unit {
@@ -59,17 +61,26 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 								array_val!(TimestampNanosecondArray, col, row_idx, value_as_datetime)
 							}
 						}
-						.expect("invalid timestamp"),
+						.ok_or_else(|| {
+							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported timestamp type")
+						})?,
 					),
-					_ => unimplemented!(),
+					other => {
+						return Err(ErrorResponse::error(
+							SqlState::FEATURE_NOT_SUPPORTED,
+							format!("arrow to pg conversion not implemented for {}", other),
+						))
+					}
 				};
 			}
 		}
 	}
+
+	Ok(())
 }
 
-pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
-	match ty {
+pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
+	Ok(match ty {
 		DataType::Int8 | DataType::Int16 => DataTypeOid::Int2,
 		DataType::Int32 => DataTypeOid::Int4,
 		DataType::Int64 => DataTypeOid::Int8,
@@ -83,17 +94,24 @@ pub fn data_type_to_oid(ty: &DataType) -> DataTypeOid {
 		DataType::Utf8 => DataTypeOid::Text,
 		DataType::Date32 => DataTypeOid::Date,
 		DataType::Timestamp(_, None) => DataTypeOid::Timestamp,
-		other => unimplemented!("arrow to pg conversion not implemented: {}", other),
-	}
+		other => {
+			return Err(ErrorResponse::error(
+				SqlState::FEATURE_NOT_SUPPORTED,
+				format!("arrow to pg conversion not implemented for {}", other),
+			))
+		}
+	})
 }
 
-pub fn schema_to_field_desc(schema: &Schema) -> Vec<FieldDescription> {
+pub fn schema_to_field_desc(schema: &Schema) -> Result<Vec<FieldDescription>, ErrorResponse> {
 	schema
 		.fields()
 		.iter()
-		.map(|f| FieldDescription {
-			name: f.name().clone(),
-			data_type: data_type_to_oid(f.data_type()),
+		.map(|f| {
+			Ok(FieldDescription {
+				name: f.name().clone(),
+				data_type: data_type_to_oid(f.data_type())?,
+			})
 		})
 		.collect()
 }
