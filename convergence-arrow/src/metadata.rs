@@ -21,6 +21,7 @@ macro_rules! table_builder {
 				}
 			}
 
+			#[allow(dead_code)] // some tables aren't currently written to
 			fn add_row(
 				&mut self,
 				$($field_name: $param_type,)*
@@ -76,12 +77,20 @@ table_builder! {
 	relkind: StringBuilder, &str,
 }
 
+table_builder! {
+	PgProc
+	oid: UInt32Builder, u32,
+	proname: StringBuilder, &str,
+	pronamespace: UInt32Builder, u32,
+}
+
 struct MetadataBuilder {
 	next_oid: u32,
 	pg_database: PgDatabaseBuilder,
 	pg_namespace: PgNamespaceBuilder,
 	pg_tables: PgTablesBuilder,
 	pg_class: PgClassBuilder,
+	pg_proc: PgProc,
 }
 
 impl MetadataBuilder {
@@ -92,6 +101,7 @@ impl MetadataBuilder {
 			pg_namespace: PgNamespaceBuilder::new(),
 			pg_tables: PgTablesBuilder::new(),
 			pg_class: PgClassBuilder::new(),
+			pg_proc: PgProc::new(),
 		}
 	}
 
@@ -126,6 +136,7 @@ impl MetadataBuilder {
 		schema.register_table("pg_namespace".to_owned(), self.pg_namespace.try_into()?)?;
 		schema.register_table("pg_class".to_owned(), self.pg_class.try_into()?)?;
 		schema.register_table("pg_database".to_owned(), self.pg_database.try_into()?)?;
+		schema.register_table("pg_proc".to_owned(), self.pg_proc.try_into()?)?;
 
 		Ok(schema)
 	}
