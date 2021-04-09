@@ -1,3 +1,5 @@
+//! Contains the [Connection] struct, which represents an individual Postgres session, and related types.
+
 use crate::engine::{Engine, Portal};
 use crate::protocol::*;
 use crate::protocol_ext::DataRowBatch;
@@ -9,14 +11,18 @@ use std::collections::HashMap;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
 
+/// Describes an error that may or may not result in the termination of a connection.
 #[derive(thiserror::Error, Debug)]
 pub enum ConnectionError {
-	#[error("io error: {0}")]
-	Io(#[from] std::io::Error),
+	/// A protocol error was encountered, e.g. an invalid message for a connection's current state.
 	#[error("protocol error: {0}")]
 	Protocol(#[from] ProtocolError),
+	/// A Postgres error containing a SqlState code and message occurred.
+	/// May result in connection termination depending on the severity.
 	#[error("error response: {0}")]
 	ErrorResponse(#[from] ErrorResponse),
+	/// The connection was closed.
+	/// This always implies connection termination.
 	#[error("connection closed")]
 	ConnectionClosed,
 }
@@ -38,6 +44,8 @@ struct BoundPortal<E: Engine> {
 	pub row_desc: RowDescription,
 }
 
+/// Describes a connection using a specific engine and stream type.
+/// Contains connection state including prepared statements and portals.
 pub struct Connection<E: Engine, S> {
 	engine: E,
 	state: ConnectionState,
@@ -47,6 +55,7 @@ pub struct Connection<E: Engine, S> {
 }
 
 impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
+	/// Create a new connection from an engine instance.
 	pub fn new(engine: E) -> Self {
 		Self {
 			state: ConnectionState::Startup,
@@ -244,6 +253,8 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 		}
 	}
 
+	/// Given a stream (typically TCP), extract Postgres protocol messages and respond accordingly.
+	/// This function only returns when the connection is closed (either gracefully or due to an error).
 	pub async fn run(&mut self, stream: S) -> Result<(), ConnectionError> {
 		let mut framed = Framed::new(stream, ConnectionCodec::new());
 		loop {

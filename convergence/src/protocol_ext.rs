@@ -1,8 +1,13 @@
+//! Contains extensions that make working with the Postgres protocol simpler or more efficient.
+
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
 use chrono::{NaiveDate, NaiveDateTime};
 use tokio_util::codec::Encoder;
 
+/// Supports batched rows for e.g. returning portal result sets.
+///
+/// NB: this struct only performs limited validation of column consistency across rows.
 pub struct DataRowBatch {
 	format_code: FormatCode,
 	num_cols: usize,
@@ -12,6 +17,7 @@ pub struct DataRowBatch {
 }
 
 impl DataRowBatch {
+	/// Creates a new row batch using the given format code, requiring a certain number of columns per row.
 	pub fn new(format_code: FormatCode, num_cols: usize) -> Self {
 		Self {
 			format_code,
@@ -22,15 +28,20 @@ impl DataRowBatch {
 		}
 	}
 
+	/// Creates a [DataRowBatch] from the given [RowDescription].
 	pub fn from_row_desc(desc: &RowDescription) -> Self {
 		Self::new(desc.format_code, desc.fields.len())
 	}
 
+	/// Starts writing a new row.
+	///
+	/// Returns a [DataRowWriter] that is responsible for the actual value encoding.
 	pub fn create_row(&mut self) -> DataRowWriter {
 		self.num_rows += 1;
 		DataRowWriter::new(self)
 	}
 
+	/// Returns the number of rows currently written to this batch.
 	pub fn num_rows(&self) -> usize {
 		self.num_rows
 	}
@@ -38,6 +49,7 @@ impl DataRowBatch {
 
 macro_rules! primitive_write {
 	($name: ident, $type: ident) => {
+		#[allow(missing_docs)]
 		pub fn $name(&mut self, val: $type) {
 			match self.parent.format_code {
 				FormatCode::Text => self.write_value(&val.to_string().into_bytes()),
@@ -47,28 +59,31 @@ macro_rules! primitive_write {
 	};
 }
 
+/// Temporarily leased from a [DataRowBatch] to encode a single row.
 pub struct DataRowWriter<'a> {
 	current_col: usize,
 	parent: &'a mut DataRowBatch,
 }
 
 impl<'a> DataRowWriter<'a> {
-	pub fn new(parent: &'a mut DataRowBatch) -> Self {
+	fn new(parent: &'a mut DataRowBatch) -> Self {
 		parent.row.put_i16(parent.num_cols as i16);
 		Self { current_col: 0, parent }
 	}
 
-	pub fn write_value(&mut self, data: &[u8]) {
+	fn write_value(&mut self, data: &[u8]) {
 		self.current_col += 1;
 		self.parent.row.put_i32(data.len() as i32);
 		self.parent.row.put_slice(data);
 	}
 
+	/// Writes a null value for the next column.
 	pub fn write_null(&mut self) {
 		self.current_col += 1;
 		self.parent.row.put_i32(-1);
 	}
 
+	/// Writes a string value for the next column.
 	pub fn write_string(&mut self, val: &str) {
 		self.write_value(val.as_bytes());
 	}
@@ -77,6 +92,7 @@ impl<'a> DataRowWriter<'a> {
 		NaiveDate::from_ymd(2000, 1, 1)
 	}
 
+	/// Writes a date value for the next column.
 	pub fn write_date(&mut self, val: NaiveDate) {
 		match self.parent.format_code {
 			FormatCode::Binary => self.write_int4(val.signed_duration_since(Self::pg_date_epoch()).num_days() as i32),
@@ -84,6 +100,7 @@ impl<'a> DataRowWriter<'a> {
 		}
 	}
 
+	/// Writes a timestamp value for the next column.
 	pub fn write_timestamp(&mut self, val: NaiveDateTime) {
 		match self.parent.format_code {
 			FormatCode::Binary => {

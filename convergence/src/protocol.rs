@@ -1,3 +1,9 @@
+//! Contains types that represent the core Postgres wire protocol.
+
+// this module requires a lot more work to document
+// may want to build this automatically from Postgres docs if possible
+#![allow(missing_docs)]
+
 use bytes::{Buf, BufMut, BytesMut};
 use std::convert::TryFrom;
 use std::fmt::Display;
@@ -8,14 +14,19 @@ use tokio_util::codec::{Decoder, Encoder};
 macro_rules! data_types {
 	($($name:ident = $oid:expr, $size: expr)*) => {
 		#[derive(Debug, Copy, Clone)]
+		/// Describes a Postgres data type.
 		pub enum DataTypeOid {
 			$(
+				#[allow(missing_docs)]
 				$name,
 			)*
+			/// A type which is not known to this crate.
 			Unknown(u32),
 		}
 
 		impl DataTypeOid {
+			/// Fetch the size in bytes for this data type.
+			/// Variably-sized types return -1.
 			pub fn size_bytes(&self) -> i16 {
 				match self {
 					$(
@@ -66,9 +77,12 @@ data_types! {
 	Text = 25, -1
 }
 
+/// Describes how to format a given value or set of values.
 #[derive(Debug, Copy, Clone)]
 pub enum FormatCode {
+	/// Use the stable text representation.
 	Text = 0,
+	/// Use the less-stable binary representation.
 	Binary = 1,
 }
 
