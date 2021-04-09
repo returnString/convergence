@@ -22,7 +22,7 @@ struct DataFusionPortal {
 impl Portal for DataFusionPortal {
 	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		for arrow_batch in self.df.collect().await.expect("collect failed") {
-			record_batch_to_rows(&arrow_batch, batch);
+			record_batch_to_rows(&arrow_batch, batch)?;
 		}
 		Ok(())
 	}
@@ -116,7 +116,7 @@ impl Engine for DataFusionEngine {
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		let df = self.plan(statement)?;
-		Ok(schema_to_field_desc(&df.schema().clone().into()))
+		schema_to_field_desc(&df.schema().clone().into())
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
