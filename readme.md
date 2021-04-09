@@ -1,8 +1,11 @@
 # Convergence
-![Tests](https://github.com/reservoirdb/convergence/workflows/Test/badge.svg)
+![Tests](https://github.com/reservoirdb/convergence/workflows/Test/badge.svg) ![Crates.io](https://img.shields.io/crates/v/convergence)
 
-A Rust crate for writing servers that speak PostgreSQL's wire protocol.
-
-Additionally, the experimental `convergence-arrow` crate enables conversion from Apache Arrow dataframes into Postgres result sets, allowing you to access your Arrow-powered data services via standard Postgres drivers.
+A set of tools for writing servers that speak PostgreSQL's wire protocol.
 
 🚧 This project is _extremely_ WIP at this stage.
+
+## Crates
+`convergence` contains the core traits, protocol handling and connection state machine for emulating a Postgres server.
+
+`convergence-arrow` enables translation of [Apache Arrow](https://arrow.apache.org) dataframes into Postgres result sets, allowing you to access your Arrow-powered data services via standard Postgres drivers.
