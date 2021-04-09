@@ -1,5 +1,5 @@
 use arrow::array::{
-	Date32Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
+	Date32Array, Date64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
 	TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array,
 	UInt32Array, UInt64Array, UInt8Array,
 };
@@ -48,6 +48,11 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported date type")
 						})?)
 					}
+					DataType::Date64 => {
+						row.write_date(array_val!(Date64Array, col, row_idx, value_as_date).ok_or_else(|| {
+							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported date type")
+						})?)
+					}
 					DataType::Timestamp(unit, None) => row.write_timestamp(
 						match unit {
 							TimeUnit::Second => array_val!(TimestampSecondArray, col, row_idx, value_as_datetime),
@@ -92,7 +97,7 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 		DataType::Float32 => DataTypeOid::Float4,
 		DataType::Float64 => DataTypeOid::Float8,
 		DataType::Utf8 => DataTypeOid::Text,
-		DataType::Date32 => DataTypeOid::Date,
+		DataType::Date32 | DataType::Date64 => DataTypeOid::Date,
 		DataType::Timestamp(_, None) => DataTypeOid::Timestamp,
 		other => {
 			return Err(ErrorResponse::error(
