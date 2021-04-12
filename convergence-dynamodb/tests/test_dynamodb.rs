@@ -177,3 +177,23 @@ async fn row_values() {
 		assert_eq!(get_row(i), (format!("item_{}", i).as_str(), (i as f64) * 1.5));
 	}
 }
+
+#[tokio::test]
+async fn point_query() {
+	let client = setup().await;
+
+	let rows = client
+		.query("select some_id, float_val from ddb_test where some_id = 'item_1'", &[])
+		.await
+		.unwrap();
+
+	assert_eq!(rows.len(), 1);
+
+	let get_row = |idx: usize| {
+		let row = &rows[idx];
+		let cols: (&str, f64) = (row.get(0), row.get(1));
+		cols
+	};
+
+	assert_eq!(get_row(0), ("item_1", 1.5));
+}

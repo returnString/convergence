@@ -1,11 +1,13 @@
+use crate::exec_get::DynamoDbGetItemExecutionPlan;
 use crate::exec_scan::DynamoDbScanExecutionPlan;
 use arrow::datatypes::SchemaRef;
-use datafusion::datasource::datasource::{Statistics, TableProvider};
+use datafusion::datasource::datasource::{Statistics, TableProvider, TableProviderFilterPushDown};
 use datafusion::error::DataFusionError;
-use datafusion::logical_plan::Expr;
+use datafusion::logical_plan::{Expr, Operator};
 use datafusion::physical_plan::ExecutionPlan;
-use rusoto_dynamodb::DynamoDbClient;
+use rusoto_dynamodb::{AttributeValue, DynamoDbClient};
 use std::any::Any;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[derive(Debug, Clone)]
@@ -72,9 +74,43 @@ impl TableProvider for DynamoDbTableProvider {
 		&self,
 		_projection: &Option<Vec<usize>>,
 		_batch_size: usize,
-		_filters: &[Expr],
+		filters: &[Expr],
 		_limit: Option<usize>,
 	) -> Result<Arc<dyn ExecutionPlan>, DataFusionError> {
+		let mut hash_key_eq = None;
+
+		// TODO: need to handle sort key predicates here, plus range operators
+		// also need to unpack conjunction/disjunction
+		for filter in filters {
+			if let Expr::BinaryExpr { left, op, right } = filter {
+				if let (Expr::Column(column_name), Operator::Eq, Expr::Literal(value)) = (&**left, op, &**right) {
+					if column_name == self.def.hash_key() {
+						hash_key_eq = Some(value.to_string());
+					}
+				}
+			}
+		}
+
+		// if we're searching for an exact key, use the exec plan that maps to GetItem
+		if let Some(hash_value) = hash_key_eq {
+			let mut key = HashMap::new();
+			key.insert(
+				self.def.hash_key().to_owned(),
+				AttributeValue {
+					s: Some(hash_value),
+					..Default::default()
+				},
+			);
+
+			return Ok(Arc::new(DynamoDbGetItemExecutionPlan {
+				client: self.client.clone(),
+				def: self.def.clone(),
+				key,
+			}));
+		}
+
+		// safe but slow fallback: scan the table and do any necessary filtering inside DataFusion
+		// TODO: allow partition tuning
 		Ok(Arc::new(DynamoDbScanExecutionPlan {
 			client: self.client.clone(),
 			def: self.def.clone(),
@@ -84,5 +120,9 @@ impl TableProvider for DynamoDbTableProvider {
 
 	fn statistics(&self) -> Statistics {
 		Default::default()
+	}
+
+	fn supports_filter_pushdown(&self, _filter: &Expr) -> Result<TableProviderFilterPushDown, DataFusionError> {
+		Ok(TableProviderFilterPushDown::Inexact)
 	}
 }
