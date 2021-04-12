@@ -1,0 +1,24 @@
+[package]
+name = "convergence-dynamodb"
+version = "0.2.0"
+authors = ["Ruan Pearce-Authers <ruan@reservoirdb.com>"]
+edition = "2018"
+description = "Utils for bridging DynamoDB and PostgreSQL's wire protocol"
+license = "MIT"
+repository = "https://github.com/reservoirdb/convergence"
+
+[dependencies]
+tokio = { version = "1.0" }
+sqlparser = "0.9"
+async-trait = "0.1"
+arrow = { git = "https://github.com/apache/arrow" }
+datafusion = { git = "https://github.com/apache/arrow" }
+convergence = { path = "../convergence", version = "0.2" }
+convergence-arrow = { path = "../convergence-arrow", version = "0.2" }
+rusoto_core = "0.46.0"
+rusoto_dynamodb = "0.46.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+tokio-postgres = "0.7"
+uuid = { version = "0.8", features = [ "v4" ] }
