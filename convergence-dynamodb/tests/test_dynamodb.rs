@@ -7,7 +7,7 @@ use convergence::server::{self, BindOptions};
 use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
 use convergence_dynamodb::provider::{DynamoDBKey, DynamoDBTableDefinition, DynamoDBTableProvider};
 use datafusion::prelude::*;
-use rusoto_core::{credential::DefaultCredentialsProvider, Client, HttpClient, Region};
+use rusoto_core::{credential::StaticProvider, Client, HttpClient, Region};
 use rusoto_dynamodb::{
 	AttributeDefinition, AttributeValue, CreateTableInput, DynamoDb, DynamoDbClient, KeySchemaElement, PutItemInput,
 };
@@ -45,7 +45,10 @@ impl Engine for DataFusionEngine {
 		// use the extended client init to avoid issues in rusoto's usage of hyper
 		// https://github.com/hyperium/hyper/issues/2112
 		let ddb_client = DynamoDbClient::new_with_client(
-			Client::new_with(DefaultCredentialsProvider::new().unwrap(), HttpClient::new().unwrap()),
+			Client::new_with(
+				StaticProvider::new("blah".to_owned(), "blah".to_owned(), None, None),
+				HttpClient::new().unwrap(),
+			),
 			Region::Custom {
 				name: "test".to_owned(),
 				endpoint: "http://localhost:8000".to_owned(),
