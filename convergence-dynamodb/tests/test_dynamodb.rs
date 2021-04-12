@@ -5,7 +5,7 @@ use convergence::protocol::{ErrorResponse, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
-use convergence_dynamodb::provider::{DynamoDBKey, DynamoDBTableDefinition, DynamoDBTableProvider};
+use convergence_dynamodb::provider::{DynamoDbKey, DynamoDbTableDefinition, DynamoDbTableProvider};
 use datafusion::prelude::*;
 use rusoto_core::{credential::StaticProvider, Client, HttpClient, Region};
 use rusoto_dynamodb::{
@@ -107,11 +107,11 @@ impl Engine for DataFusionEngine {
 		let mut ctx = ExecutionContext::new();
 		ctx.register_table(
 			"ddb_test",
-			Arc::new(DynamoDBTableProvider::new(
+			Arc::new(DynamoDbTableProvider::new(
 				ddb_client,
-				DynamoDBTableDefinition::new(
+				DynamoDbTableDefinition::new(
 					ddb_table_name,
-					DynamoDBKey::Hash("some_id".to_owned()),
+					DynamoDbKey::Hash("some_id".to_owned()),
 					Arc::new(table_schema),
 				),
 			)),

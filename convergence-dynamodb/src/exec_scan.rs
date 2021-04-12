@@ -1,4 +1,4 @@
-use crate::provider::DynamoDBTableDefinition;
+use crate::provider::DynamoDbTableDefinition;
 use arrow::array::{ArrayRef, Float64Builder, StringBuilder};
 use arrow::datatypes::{DataType, SchemaRef};
 use arrow::record_batch::RecordBatch;
@@ -10,22 +10,22 @@ use rusoto_dynamodb::{DynamoDb, DynamoDbClient, ScanInput};
 use std::any::Any;
 use std::sync::Arc;
 
-pub struct DynamoDBScanExecutionPlan {
+pub struct DynamoDbScanExecutionPlan {
 	pub client: Arc<DynamoDbClient>,
-	pub def: DynamoDBTableDefinition,
+	pub def: DynamoDbTableDefinition,
 	pub num_partitions: usize,
 }
 
-impl std::fmt::Debug for DynamoDBScanExecutionPlan {
+impl std::fmt::Debug for DynamoDbScanExecutionPlan {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("DynamoDBScanExecutionPlan")
+		f.debug_struct("DynamoDbScanExecutionPlan")
 			.field("def", &self.def)
 			.finish()
 	}
 }
 
 #[async_trait]
-impl ExecutionPlan for DynamoDBScanExecutionPlan {
+impl ExecutionPlan for DynamoDbScanExecutionPlan {
 	fn as_any(&self) -> &dyn Any {
 		self
 	}
