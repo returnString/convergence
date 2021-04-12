@@ -78,6 +78,7 @@ impl TableProvider for DynamoDBTableProvider {
 		Ok(Arc::new(DynamoDBScanExecutionPlan {
 			client: self.client.clone(),
 			def: self.def.clone(),
+			num_partitions: 1,
 		}))
 	}
 
