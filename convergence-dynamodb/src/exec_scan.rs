@@ -1,7 +1,6 @@
+use crate::items::items_to_record_batch;
 use crate::provider::DynamoDbTableDefinition;
-use arrow::array::{ArrayRef, Float64Builder, StringBuilder};
-use arrow::datatypes::{DataType, SchemaRef};
-use arrow::record_batch::RecordBatch;
+use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::common::SizedRecordBatchStream;
@@ -68,46 +67,7 @@ impl ExecutionPlan for DynamoDbScanExecutionPlan {
 
 			let items = &data.items.unwrap_or_default();
 
-			let mut columns = Vec::new();
-			for field in self.def.schema.fields() {
-				let array: ArrayRef = match field.data_type() {
-					DataType::Utf8 => {
-						let mut builder = StringBuilder::new(items.len());
-						for item in items {
-							let attr = item.get(field.name());
-							match attr.and_then(|v| v.s.as_ref()) {
-								Some(value) => builder.append_value(value).unwrap(),
-								None => builder.append_null().unwrap(),
-							}
-						}
-						Arc::new(builder.finish())
-					}
-					DataType::Float64 => {
-						let mut builder = Float64Builder::new(items.len());
-						for item in items {
-							let attr = item.get(field.name());
-							match attr.and_then(|v| v.n.as_ref()) {
-								Some(value) => {
-									builder
-										.append_value(
-											value
-												.parse::<f64>()
-												.map_err(|err| DataFusionError::Execution(err.to_string()))?,
-										)
-										.unwrap();
-								}
-								None => builder.append_null().unwrap(),
-							}
-						}
-						Arc::new(builder.finish())
-					}
-					_ => unimplemented!(),
-				};
-
-				columns.push(array);
-			}
-
-			batches.push(Arc::new(RecordBatch::try_new(self.def.schema.clone(), columns)?));
+			batches.push(Arc::new(items_to_record_batch(items, self.schema())?));
 
 			last_key = data.last_evaluated_key;
 			if last_key.is_none() {
