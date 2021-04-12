@@ -20,6 +20,7 @@ impl std::fmt::Debug for DynamoDbScanExecutionPlan {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		f.debug_struct("DynamoDbScanExecutionPlan")
 			.field("def", &self.def)
+			.field("num_partitions", &self.num_partitions)
 			.finish()
 	}
 }
