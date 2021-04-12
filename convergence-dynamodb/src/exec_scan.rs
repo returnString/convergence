@@ -1,5 +1,5 @@
 use crate::provider::DynamoDBTableDefinition;
-use arrow::array::{ArrayBuilder, Float64Builder, StringBuilder};
+use arrow::array::{ArrayRef, Float64Builder, StringBuilder};
 use arrow::datatypes::{DataType, SchemaRef};
 use arrow::record_batch::RecordBatch;
 use async_trait::async_trait;
@@ -65,39 +65,26 @@ impl ExecutionPlan for DynamoDBScanExecutionPlan {
 				.await
 				.map_err(|err| DataFusionError::Execution(err.to_string()))?;
 
-			let items = data.items.unwrap_or_default();
+			let items = &data.items.unwrap_or_default();
 
-			let mut builders: Vec<(_, _, Box<dyn ArrayBuilder>)> = self
-				.def
-				.schema
-				.fields()
-				.iter()
-				.map(|f| {
-					(
-						f.name().clone(),
-						f.data_type().clone(),
-						match f.data_type() {
-							DataType::Utf8 => Box::new(StringBuilder::new(items.len())) as Box<dyn ArrayBuilder>,
-							DataType::Float64 => Box::new(Float64Builder::new(items.len())) as Box<dyn ArrayBuilder>,
-							_ => unimplemented!(),
-						},
-					)
-				})
-				.collect();
-
-			for item in items {
-				for (column_name, column_type, builder) in builders.iter_mut() {
-					let attr = item.get(column_name);
-					match column_type {
-						DataType::Utf8 => {
-							let builder = builder.as_any_mut().downcast_mut::<StringBuilder>().unwrap();
+			let mut columns = Vec::new();
+			for field in self.def.schema.fields() {
+				let array: ArrayRef = match field.data_type() {
+					DataType::Utf8 => {
+						let mut builder = StringBuilder::new(items.len());
+						for item in items {
+							let attr = item.get(field.name());
 							match attr.and_then(|v| v.s.as_ref()) {
 								Some(value) => builder.append_value(value).unwrap(),
 								None => builder.append_null().unwrap(),
 							}
 						}
-						DataType::Float64 => {
-							let builder = builder.as_any_mut().downcast_mut::<Float64Builder>().unwrap();
+						Arc::new(builder.finish())
+					}
+					DataType::Float64 => {
+						let mut builder = Float64Builder::new(items.len());
+						for item in items {
+							let attr = item.get(field.name());
 							match attr.and_then(|v| v.n.as_ref()) {
 								Some(value) => {
 									builder
@@ -111,15 +98,15 @@ impl ExecutionPlan for DynamoDBScanExecutionPlan {
 								None => builder.append_null().unwrap(),
 							}
 						}
-						_ => unimplemented!(),
-					};
-				}
+						Arc::new(builder.finish())
+					}
+					_ => unimplemented!(),
+				};
+
+				columns.push(array);
 			}
 
-			batches.push(Arc::new(RecordBatch::try_new(
-				self.def.schema.clone(),
-				builders.iter_mut().map(|(_, _, b)| b.finish()).collect(),
-			)?));
+			batches.push(Arc::new(RecordBatch::try_new(self.def.schema.clone(), columns)?));
 
 			last_key = data.last_evaluated_key;
 			if last_key.is_none() {
