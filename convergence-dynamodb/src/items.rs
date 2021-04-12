@@ -18,8 +18,8 @@ pub fn items_to_record_batch(
 				for item in items {
 					let attr = item.get(field.name());
 					match attr.and_then(|v| v.s.as_ref()) {
-						Some(value) => builder.append_value(value).unwrap(),
-						None => builder.append_null().unwrap(),
+						Some(value) => builder.append_value(value)?,
+						None => builder.append_null()?,
 					}
 				}
 				Arc::new(builder.finish())
@@ -29,16 +29,12 @@ pub fn items_to_record_batch(
 				for item in items {
 					let attr = item.get(field.name());
 					match attr.and_then(|v| v.n.as_ref()) {
-						Some(value) => {
-							builder
-								.append_value(
-									value
-										.parse::<f64>()
-										.map_err(|err| DataFusionError::Execution(err.to_string()))?,
-								)
-								.unwrap();
-						}
-						None => builder.append_null().unwrap(),
+						Some(value) => builder.append_value(
+							value
+								.parse::<f64>()
+								.map_err(|err| DataFusionError::Execution(err.to_string()))?,
+						)?,
+						None => builder.append_null()?,
 					}
 				}
 				Arc::new(builder.finish())
