@@ -1,4 +1,4 @@
-use arrow::array::{ArrayRef, StringBuilder, UInt32Builder};
+use arrow::array::{ArrayRef, Int32Builder, StringBuilder, UInt32Builder};
 use arrow::datatypes::{Field, Schema};
 use arrow::record_batch::RecordBatch;
 use datafusion::catalog::catalog::CatalogProvider;
@@ -84,6 +84,14 @@ table_builder! {
 	pronamespace: UInt32Builder, u32,
 }
 
+table_builder! {
+	PgDescription
+	objoid: UInt32Builder, u32,
+	classoid: UInt32Builder, u32,
+	objsubid: Int32Builder, i32,
+	description: StringBuilder, &str,
+}
+
 struct MetadataBuilder {
 	next_oid: u32,
 	pg_database: PgDatabaseBuilder,
@@ -91,6 +99,7 @@ struct MetadataBuilder {
 	pg_tables: PgTablesBuilder,
 	pg_class: PgClassBuilder,
 	pg_proc: PgProc,
+	pg_description: PgDescription,
 }
 
 impl MetadataBuilder {
@@ -102,6 +111,7 @@ impl MetadataBuilder {
 			pg_tables: PgTablesBuilder::new(),
 			pg_class: PgClassBuilder::new(),
 			pg_proc: PgProc::new(),
+			pg_description: PgDescription::new(),
 		}
 	}
 
@@ -137,6 +147,7 @@ impl MetadataBuilder {
 		schema.register_table("pg_class".to_owned(), self.pg_class.try_into()?)?;
 		schema.register_table("pg_database".to_owned(), self.pg_database.try_into()?)?;
 		schema.register_table("pg_proc".to_owned(), self.pg_proc.try_into()?)?;
+		schema.register_table("pg_description".to_owned(), self.pg_description.try_into()?)?;
 
 		Ok(schema)
 	}
