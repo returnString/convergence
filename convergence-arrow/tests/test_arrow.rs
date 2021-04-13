@@ -27,11 +27,8 @@ struct ArrowEngine {
 	batch: RecordBatch,
 }
 
-#[async_trait]
-impl Engine for ArrowEngine {
-	type PortalType = ArrowPortal;
-
-	async fn new() -> Self {
+impl ArrowEngine {
+	fn new() -> Self {
 		let int_col = Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef;
 		let float_col = Arc::new(Float32Array::from(vec![1.5, 2.5, 3.5])) as ArrayRef;
 		let string_col = Arc::new(StringArray::from(vec!["a", "b", "c"])) as ArrayRef;
@@ -54,6 +51,11 @@ impl Engine for ArrowEngine {
 				.expect("failed to create batch"),
 		}
 	}
+}
+
+#[async_trait]
+impl Engine for ArrowEngine {
+	type PortalType = ArrowPortal;
 
 	async fn prepare(&mut self, _: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		schema_to_field_desc(&self.batch.schema())
@@ -67,9 +69,12 @@ impl Engine for ArrowEngine {
 }
 
 async fn setup() -> tokio_postgres::Client {
-	let port = server::run_background::<ArrowEngine>(BindOptions::new().with_port(0))
-		.await
-		.unwrap();
+	let port = server::run_background(
+		BindOptions::new().with_port(0),
+		Arc::new(|| Box::pin(async { ArrowEngine::new() })),
+	)
+	.await
+	.unwrap();
 
 	let (client, conn) = connect(&format!("postgres://localhost:{}/test", port), NoTls)
 		.await

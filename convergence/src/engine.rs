@@ -19,12 +19,9 @@ pub trait Portal: Send + Sync {
 ///
 /// Each connection is allocated an [Engine] instance, which it uses to prepare statements, create portals, etc.
 #[async_trait]
-pub trait Engine: Send + Sync {
+pub trait Engine: Send + Sync + 'static {
 	/// The [Portal] implementation used by [Engine::create_portal].
 	type PortalType: Portal;
-
-	/// Create a new instance of this engine type.
-	async fn new() -> Self;
 
 	/// Prepares a statement, returning a vector of field descriptions for the final statement result.
 	async fn prepare(&mut self, stmt: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse>;

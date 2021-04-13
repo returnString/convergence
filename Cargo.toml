@@ -2,4 +2,5 @@
 members = [
 	"convergence",
 	"convergence-arrow",
+	"convergence-dynamodb",
 ]

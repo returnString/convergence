@@ -9,7 +9,6 @@ jobs:
       matrix:
         os:
         - ubuntu-20.04
-        - windows-2019
         toolchain:
         - 1.51.0
 
@@ -23,6 +22,9 @@ jobs:
       uses: actions-rs/toolchain@v1
       with:
         toolchain: ${{ matrix.toolchain }}
+
+    - name: Boot test dependencies
+      run: docker-compose up -d
 
     - name: Run tests
       uses: actions-rs/cargo@v1

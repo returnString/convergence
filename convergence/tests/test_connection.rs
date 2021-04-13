@@ -4,6 +4,7 @@ use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlSta
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
+use std::sync::Arc;
 use tokio_postgres::{connect, NoTls, SimpleQueryMessage};
 
 struct ReturnSingleScalarPortal;
@@ -22,10 +23,6 @@ struct ReturnSingleScalarEngine;
 #[async_trait]
 impl Engine for ReturnSingleScalarEngine {
 	type PortalType = ReturnSingleScalarPortal;
-
-	async fn new() -> Self {
-		Self
-	}
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		if let Statement::Query(query) = &statement {
@@ -54,9 +51,12 @@ impl Engine for ReturnSingleScalarEngine {
 }
 
 async fn setup() -> tokio_postgres::Client {
-	let port = server::run_background::<ReturnSingleScalarEngine>(BindOptions::new().with_port(0))
-		.await
-		.unwrap();
+	let port = server::run_background(
+		BindOptions::new().with_port(0),
+		Arc::new(|| Box::pin(async { ReturnSingleScalarEngine })),
+	)
+	.await
+	.unwrap();
 
 	let (client, conn) = connect(&format!("postgres://localhost:{}/test", port), NoTls)
 		.await
