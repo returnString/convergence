@@ -134,6 +134,8 @@ impl MetadataBuilder {
 			self.pg_tables.add_row(schema_name, &table_name)?;
 			self.pg_namespace.add_row(schema_oid, &schema_name)?;
 			self.pg_class.add_row(table_oid, &table_name, schema_oid, "r")?;
+			let desc_oid = self.alloc_oid();
+			self.pg_description.add_row(desc_oid, table_oid, 0, "")?;
 		}
 
 		Ok(())
