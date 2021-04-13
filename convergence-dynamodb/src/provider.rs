@@ -82,6 +82,7 @@ impl TableProvider for DynamoDbTableProvider {
 		// TODO: need to handle sort key predicates here, plus range operators
 		// also need to unpack conjunction/disjunction
 		for filter in filters {
+			// update once matching on smart ptrs is stabilised
 			if let Expr::BinaryExpr { left, op, right } = filter {
 				if let (Expr::Column(column_name), Operator::Eq, Expr::Literal(value)) = (&**left, op, &**right) {
 					if column_name == self.def.hash_key() {
@@ -92,21 +93,26 @@ impl TableProvider for DynamoDbTableProvider {
 		}
 
 		// if we're searching for an exact key, use the exec plan that maps to GetItem
-		if let Some(hash_value) = hash_key_eq {
-			let mut key = HashMap::new();
-			key.insert(
-				self.def.hash_key().to_owned(),
-				AttributeValue {
-					s: Some(hash_value),
-					..Default::default()
-				},
-			);
+		match &self.def.key {
+			DynamoDbKey::Hash(hash_key) => {
+				if let Some(hash_value) = hash_key_eq {
+					let mut key = HashMap::new();
+					key.insert(
+						hash_key.clone(),
+						AttributeValue {
+							s: Some(hash_value),
+							..Default::default()
+						},
+					);
 
-			return Ok(Arc::new(DynamoDbGetItemExecutionPlan {
-				client: self.client.clone(),
-				def: self.def.clone(),
-				key,
-			}));
+					return Ok(Arc::new(DynamoDbGetItemExecutionPlan {
+						client: self.client.clone(),
+						def: self.def.clone(),
+						key,
+					}));
+				}
+			}
+			DynamoDbKey::Composite(_hash_key, _sort_key) => (),
 		}
 
 		// safe but slow fallback: scan the table and do any necessary filtering inside DataFusion
