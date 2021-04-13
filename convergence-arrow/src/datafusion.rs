@@ -7,10 +7,47 @@ use convergence::protocol::{ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use datafusion::error::DataFusionError;
 use datafusion::prelude::*;
-use sqlparser::ast::Statement;
+use sqlparser::ast::{Expr, Query, Select, SelectItem, SetExpr, Statement, Value};
 
 fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 	ErrorResponse::error(SqlState::DataException, err.to_string())
+}
+
+// dummy query used as replacement for set variable statements etc
+fn dummy_query() -> Statement {
+	Statement::Query(Box::new(Query {
+		body: Box::new(SetExpr::Select(Box::new(Select {
+			into: None,
+			qualify: None,
+			projection: vec![SelectItem::UnnamedExpr(Expr::Value(Value::Number(
+				"1".to_owned(),
+				false,
+			)))],
+			top: None,
+			sort_by: vec![],
+			selection: None,
+			cluster_by: vec![],
+			distinct: false,
+			distribute_by: vec![],
+			group_by: vec![],
+			from: vec![],
+			having: None,
+			lateral_views: vec![],
+		}))),
+		locks: vec![],
+		limit: None,
+		with: None,
+		fetch: None,
+		offset: None,
+		order_by: vec![],
+	}))
+}
+
+fn translate_statement(statement: &Statement) -> Statement {
+	match statement {
+		Statement::SetVariable { .. } => dummy_query(),
+		other => other.clone(),
+	}
 }
 
 /// A portal built using a logical DataFusion query plan.
@@ -45,12 +82,22 @@ impl Engine for DataFusionEngine {
 	type PortalType = DataFusionPortal;
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
-		let plan = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
+		let plan = self
+			.ctx
+			.sql(&translate_statement(statement).to_string())
+			.await
+			.map_err(df_err_to_sql)?;
+
 		schema_to_field_desc(&plan.schema().clone().into())
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
-		let df = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
+		let df = self
+			.ctx
+			.sql(&translate_statement(statement).to_string())
+			.await
+			.map_err(df_err_to_sql)?;
+
 		Ok(DataFusionPortal { df })
 	}
 }
