@@ -27,17 +27,19 @@ struct DataFusionEngine {
 	ctx: ExecutionContext,
 }
 
-#[async_trait]
-impl Engine for DataFusionEngine {
-	type PortalType = DataFusionPortal;
-
-	async fn new() -> Self {
+impl DataFusionEngine {
+	fn new() -> Self {
 		let mut ctx = ExecutionContext::new();
 		ctx.register_csv("test_100_4buckets", "data/100_4buckets.csv", CsvReadOptions::new())
 			.expect("failed to register csv");
 
 		Self { ctx }
 	}
+}
+
+#[async_trait]
+impl Engine for DataFusionEngine {
+	type PortalType = DataFusionPortal;
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		let plan = self.ctx.sql(&statement.to_string()).expect("sql failed");
@@ -51,9 +53,12 @@ impl Engine for DataFusionEngine {
 }
 
 async fn setup() -> tokio_postgres::Client {
-	let port = server::run_background::<DataFusionEngine>(BindOptions::new().with_port(0))
-		.await
-		.unwrap();
+	let port = server::run_background(
+		BindOptions::new().with_port(0),
+		Arc::new(|| Box::pin(async { DataFusionEngine::new() })),
+	)
+	.await
+	.unwrap();
 
 	let (client, conn) = connect(&format!("postgres://localhost:{}/test", port), NoTls)
 		.await
