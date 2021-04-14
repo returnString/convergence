@@ -1,4 +1,5 @@
 use crate::exec_get::DynamoDbGetItemExecutionPlan;
+use crate::exec_query::DynamoDbQueryExecutionPlan;
 use crate::exec_scan::DynamoDbScanExecutionPlan;
 use arrow::datatypes::SchemaRef;
 use datafusion::datasource::datasource::{Statistics, TableProvider, TableProviderFilterPushDown};
@@ -92,9 +93,9 @@ impl TableProvider for DynamoDbTableProvider {
 			}
 		}
 
-		// if we're searching for an exact key, use the exec plan that maps to GetItem
 		match &self.def.key {
 			DynamoDbKey::Hash(hash_key) => {
+				// if we're searching for an exact key on a hash-only table, use the GetItem API
 				if let Some(hash_value) = hash_key_eq {
 					let mut key = HashMap::new();
 					key.insert(
@@ -112,7 +113,16 @@ impl TableProvider for DynamoDbTableProvider {
 					}));
 				}
 			}
-			DynamoDbKey::Composite(_hash_key, _sort_key) => (),
+			DynamoDbKey::Composite(_, _) => {
+				// if we're searching in a specific partition within a composite table, use the Query API
+				if let Some(hash_value) = hash_key_eq {
+					return Ok(Arc::new(DynamoDbQueryExecutionPlan {
+						client: self.client.clone(),
+						def: self.def.clone(),
+						hash_value,
+					}));
+				}
+			}
 		}
 
 		// safe but slow fallback: scan the table and do any necessary filtering inside DataFusion
