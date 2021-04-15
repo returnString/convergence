@@ -1,27 +1,19 @@
 use crate::items::items_to_record_batch;
-use crate::provider::DynamoDbTableDefinition;
+use crate::provider::{DynamoDbClientWrapper, DynamoDbTableDefinition};
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::common::SizedRecordBatchStream;
 use datafusion::physical_plan::{ExecutionPlan, Partitioning, SendableRecordBatchStream};
-use rusoto_dynamodb::{AttributeValue, DynamoDb, DynamoDbClient, QueryInput};
+use rusoto_dynamodb::{AttributeValue, DynamoDb, QueryInput};
 use std::any::Any;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct DynamoDbQueryExecutionPlan {
-	pub client: Arc<DynamoDbClient>,
-	pub def: DynamoDbTableDefinition,
-	pub hash_value: String,
-}
-
-impl std::fmt::Debug for DynamoDbQueryExecutionPlan {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("DynamoDbQueryExecutionPlan")
-			.field("def", &self.def)
-			.field("hash_value", &self.hash_value)
-			.finish()
-	}
+	pub(crate) client: Arc<DynamoDbClientWrapper>,
+	pub(crate) def: DynamoDbTableDefinition,
+	pub(crate) hash_value: String,
 }
 
 #[async_trait]

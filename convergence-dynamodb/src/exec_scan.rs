@@ -1,27 +1,19 @@
 use crate::items::items_to_record_batch;
-use crate::provider::DynamoDbTableDefinition;
+use crate::provider::{DynamoDbClientWrapper, DynamoDbTableDefinition};
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::common::SizedRecordBatchStream;
 use datafusion::physical_plan::{ExecutionPlan, Partitioning, SendableRecordBatchStream};
-use rusoto_dynamodb::{DynamoDb, DynamoDbClient, ScanInput};
+use rusoto_dynamodb::{DynamoDb, ScanInput};
 use std::any::Any;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct DynamoDbScanExecutionPlan {
-	pub client: Arc<DynamoDbClient>,
-	pub def: DynamoDbTableDefinition,
-	pub num_partitions: usize,
-}
-
-impl std::fmt::Debug for DynamoDbScanExecutionPlan {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("DynamoDbScanExecutionPlan")
-			.field("def", &self.def)
-			.field("num_partitions", &self.num_partitions)
-			.finish()
-	}
+	pub(crate) client: Arc<DynamoDbClientWrapper>,
+	pub(crate) def: DynamoDbTableDefinition,
+	pub(crate) num_partitions: usize,
 }
 
 #[async_trait]

@@ -1,28 +1,20 @@
 use crate::items::items_to_record_batch;
-use crate::provider::DynamoDbTableDefinition;
+use crate::provider::{DynamoDbClientWrapper, DynamoDbTableDefinition};
 use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::common::SizedRecordBatchStream;
 use datafusion::physical_plan::{ExecutionPlan, Partitioning, SendableRecordBatchStream};
-use rusoto_dynamodb::{AttributeValue, DynamoDb, DynamoDbClient, GetItemInput};
+use rusoto_dynamodb::{AttributeValue, DynamoDb, GetItemInput};
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug)]
 pub struct DynamoDbGetItemExecutionPlan {
-	pub client: Arc<DynamoDbClient>,
-	pub def: DynamoDbTableDefinition,
-	pub key: HashMap<String, AttributeValue>,
-}
-
-impl std::fmt::Debug for DynamoDbGetItemExecutionPlan {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		f.debug_struct("DynamoDbGetItemExecutionPlan")
-			.field("def", &self.def)
-			.field("key", &self.key)
-			.finish()
-	}
+	pub(crate) client: Arc<DynamoDbClientWrapper>,
+	pub(crate) def: DynamoDbTableDefinition,
+	pub(crate) key: HashMap<String, AttributeValue>,
 }
 
 #[async_trait]

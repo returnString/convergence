@@ -9,7 +9,26 @@ use datafusion::physical_plan::ExecutionPlan;
 use rusoto_dynamodb::{AttributeValue, DynamoDbClient};
 use std::any::Any;
 use std::collections::HashMap;
+use std::fmt;
+use std::ops::Deref;
 use std::sync::Arc;
+
+#[derive(Clone)]
+pub(crate) struct DynamoDbClientWrapper(DynamoDbClient);
+
+impl Deref for DynamoDbClientWrapper {
+	type Target = DynamoDbClient;
+
+	fn deref(&self) -> &Self::Target {
+		&self.0
+	}
+}
+
+impl fmt::Debug for DynamoDbClientWrapper {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		write!(f, "DynamoDbClient")
+	}
+}
 
 #[derive(Debug, Clone)]
 pub enum DynamoDbKey {
@@ -49,14 +68,14 @@ impl DynamoDbTableDefinition {
 }
 
 pub struct DynamoDbTableProvider {
-	client: Arc<DynamoDbClient>,
+	client: Arc<DynamoDbClientWrapper>,
 	def: DynamoDbTableDefinition,
 }
 
 impl DynamoDbTableProvider {
 	pub fn new(client: DynamoDbClient, def: DynamoDbTableDefinition) -> Self {
 		Self {
-			client: Arc::new(client),
+			client: Arc::new(DynamoDbClientWrapper(client)),
 			def,
 		}
 	}
