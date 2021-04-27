@@ -1,6 +1,6 @@
-use arrow::array::{ArrayRef, Float64Builder, StringBuilder};
-use arrow::datatypes::{DataType, SchemaRef};
-use arrow::record_batch::RecordBatch;
+use datafusion::arrow::array::{ArrayRef, Float64Builder, StringBuilder};
+use datafusion::arrow::datatypes::{DataType, SchemaRef};
+use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::error::DataFusionError;
 use rusoto_dynamodb::AttributeValue;
 use std::collections::HashMap;

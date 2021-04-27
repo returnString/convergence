@@ -11,8 +11,7 @@ repository = "https://github.com/reservoirdb/convergence"
 tokio = { version = "1.5" }
 sqlparser = "0.9"
 async-trait = "0.1"
-arrow = { git = "https://github.com/apache/arrow" }
-datafusion = { git = "https://github.com/apache/arrow" }
+datafusion = { git = "https://github.com/apache/arrow-datafusion" }
 convergence = { path = "../convergence", version = "0.2" }
 convergence-arrow = { path = "../convergence-arrow", version = "0.2" }
 rusoto_core = "0.46.0"

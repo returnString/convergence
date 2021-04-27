@@ -1,7 +1,7 @@
-use arrow::datatypes::{DataType, Field, Schema};
 use convergence::server::{self, BindOptions};
 use convergence_arrow::datafusion::DataFusionEngine;
 use convergence_dynamodb::provider::{DynamoDbKey, DynamoDbTableDefinition, DynamoDbTableProvider};
+use datafusion::arrow::datatypes::{DataType, Field, Schema};
 use datafusion::prelude::*;
 use rusoto_core::{credential::StaticProvider, Client, HttpClient, Region};
 use rusoto_dynamodb::{

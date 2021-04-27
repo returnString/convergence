@@ -1,7 +1,7 @@
 use crate::items::items_to_record_batch;
 use crate::provider::{DynamoDbClientWrapper, DynamoDbTableDefinition};
-use arrow::datatypes::SchemaRef;
 use async_trait::async_trait;
+use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::error::DataFusionError;
 use datafusion::physical_plan::common::SizedRecordBatchStream;
 use datafusion::physical_plan::{ExecutionPlan, Partitioning, SendableRecordBatchStream};

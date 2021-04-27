@@ -1,12 +1,12 @@
-use arrow::array::{
+use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
+use convergence::protocol_ext::DataRowBatch;
+use datafusion::arrow::array::{
 	Date32Array, Date64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
 	TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array,
 	UInt32Array, UInt64Array, UInt8Array,
 };
-use arrow::datatypes::{DataType, Schema, TimeUnit};
-use arrow::record_batch::RecordBatch;
-use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
-use convergence::protocol_ext::DataRowBatch;
+use datafusion::arrow::datatypes::{DataType, Schema, TimeUnit};
+use datafusion::arrow::record_batch::RecordBatch;
 
 macro_rules! array_cast {
 	($arrtype: ident, $arr: expr) => {

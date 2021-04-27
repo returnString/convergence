@@ -67,7 +67,7 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 [[package]]
 name = "arrow"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#5b08205f7e864ed29f53ed3d836845fed62d5d4a"
+source = "git+https://github.com/apache/arrow-rs?rev=c3fe3bab9905739fdda75301dab07a18c91731bd#c3fe3bab9905739fdda75301dab07a18c91731bd"
 dependencies = [
  "cfg_aliases",
  "chrono",
@@ -290,7 +290,6 @@ dependencies = [
 name = "convergence-arrow"
 version = "0.2.0"
 dependencies = [
- "arrow",
  "async-trait",
  "chrono",
  "convergence",
@@ -304,7 +303,6 @@ dependencies = [
 name = "convergence-dynamodb"
 version = "0.2.0"
 dependencies = [
- "arrow",
  "async-trait",
  "convergence",
  "convergence-arrow",
@@ -395,7 +393,7 @@ dependencies = [
 [[package]]
 name = "datafusion"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#5b08205f7e864ed29f53ed3d836845fed62d5d4a"
+source = "git+https://github.com/apache/arrow-datafusion#e86ad26a678a32e2743bc031ae5cb81e6931a231"
 dependencies = [
  "ahash",
  "arrow",
@@ -1149,7 +1147,7 @@ dependencies = [
 [[package]]
 name = "parquet"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow#5b08205f7e864ed29f53ed3d836845fed62d5d4a"
+source = "git+https://github.com/apache/arrow-rs?rev=c3fe3bab9905739fdda75301dab07a18c91731bd#c3fe3bab9905739fdda75301dab07a18c91731bd"
 dependencies = [
  "arrow",
  "base64 0.12.3",

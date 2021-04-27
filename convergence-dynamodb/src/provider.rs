@@ -1,7 +1,7 @@
 use crate::exec_get::DynamoDbGetItemExecutionPlan;
 use crate::exec_query::DynamoDbQueryExecutionPlan;
 use crate::exec_scan::DynamoDbScanExecutionPlan;
-use arrow::datatypes::SchemaRef;
+use datafusion::arrow::datatypes::SchemaRef;
 use datafusion::datasource::datasource::{Statistics, TableProvider, TableProviderFilterPushDown};
 use datafusion::error::DataFusionError;
 use datafusion::logical_plan::{Expr, Operator};
