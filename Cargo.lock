@@ -67,7 +67,7 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 [[package]]
 name = "arrow"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow-rs?rev=c3fe3bab9905739fdda75301dab07a18c91731bd#c3fe3bab9905739fdda75301dab07a18c91731bd"
+source = "git+https://github.com/apache/arrow-rs?rev=ed00e4d4a160cd5182bfafb81fee2240ec005014#ed00e4d4a160cd5182bfafb81fee2240ec005014"
 dependencies = [
  "cfg_aliases",
  "chrono",
@@ -77,6 +77,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "lexical-core",
+ "multiversion",
  "num",
  "prettytable-rs",
  "rand 0.7.3",
@@ -393,7 +394,7 @@ dependencies = [
 [[package]]
 name = "datafusion"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow-datafusion#e86ad26a678a32e2743bc031ae5cb81e6931a231"
+source = "git+https://github.com/apache/arrow-datafusion#f43dc444eb510f0ff170adecb5a23afb39c489a8"
 dependencies = [
  "ahash",
  "arrow",
@@ -932,6 +933,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "multiversion"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "025c962a3dd3cc5e0e520aa9c612201d127dcdf28616974961a649dca64f5373"
+dependencies = [
+ "multiversion-macros",
+]
+
+[[package]]
+name = "multiversion-macros"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a8a3e2bde382ebf960c1f3e79689fa5941625fe9bf694a1cb64af3e85faff3af"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1147,7 +1168,7 @@ dependencies = [
 [[package]]
 name = "parquet"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow-rs?rev=c3fe3bab9905739fdda75301dab07a18c91731bd#c3fe3bab9905739fdda75301dab07a18c91731bd"
+source = "git+https://github.com/apache/arrow-rs?rev=ed00e4d4a160cd5182bfafb81fee2240ec005014#ed00e4d4a160cd5182bfafb81fee2240ec005014"
 dependencies = [
  "arrow",
  "base64 0.12.3",
