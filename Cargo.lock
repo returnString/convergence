@@ -394,7 +394,7 @@ dependencies = [
 [[package]]
 name = "datafusion"
 version = "4.0.0-SNAPSHOT"
-source = "git+https://github.com/apache/arrow-datafusion#88222b7dcf1ba8888a5befbba5cd175fdd90ea5d"
+source = "git+https://github.com/apache/arrow-datafusion#3072df65ecab8f29f18ffe7cce4b5633f34aebe0"
 dependencies = [
  "ahash",
  "arrow",
