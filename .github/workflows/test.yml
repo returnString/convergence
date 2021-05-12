@@ -27,12 +27,12 @@ jobs:
       run: docker-compose up -d
 
     - name: Run tests
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: test
 
     - name: Run clippy
-      uses: actions-rs/cargo@v1
+      uses: actions-rs/cargo@v1.0.3
       with:
         command: clippy
         args: -- -D warnings
