@@ -245,7 +245,7 @@ dependencies = [
  "bytes",
  "chrono",
  "futures",
- "sqlparser",
+ "sqlparser 0.10.0",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -260,7 +260,7 @@ dependencies = [
  "chrono",
  "convergence",
  "datafusion",
- "sqlparser",
+ "sqlparser 0.10.0",
  "tokio",
  "tokio-postgres",
 ]
@@ -275,7 +275,7 @@ dependencies = [
  "datafusion",
  "rusoto_core",
  "rusoto_dynamodb",
- "sqlparser",
+ "sqlparser 0.10.0",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -360,8 +360,9 @@ dependencies = [
 
 [[package]]
 name = "datafusion"
-version = "5.1.0"
-source = "git+https://github.com/apache/arrow-datafusion#7932cb9373192ce2754b39c1f82f22c8a56b7266"
+version = "5.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aab48ee19b13cfe7523ae84ec203a1ca05ce1fda52f1ac0e45d87df90c548732"
 dependencies = [
  "ahash",
  "arrow",
@@ -381,7 +382,7 @@ dependencies = [
  "regex",
  "sha2",
  "smallvec",
- "sqlparser",
+ "sqlparser 0.9.0",
  "tokio",
  "tokio-stream",
  "unicode-segmentation",
@@ -1626,6 +1627,15 @@ checksum = "765f090f0e423d2b55843402a07915add955e7d60657db13707a159727326cad"
 dependencies = [
  "libc",
  "winapi",
+]
+
+[[package]]
+name = "sqlparser"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fa863a2dfc4879a35647c51dadf495a2ad53745eaf3723fda27006e745fb0ba"
+dependencies = [
+ "log",
 ]
 
 [[package]]
