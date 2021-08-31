@@ -46,15 +46,14 @@ struct BoundPortal<E: Engine> {
 
 /// Describes a connection using a specific engine and stream type.
 /// Contains connection state including prepared statements and portals.
-pub struct Connection<E: Engine, S> {
+pub struct Connection<E: Engine> {
 	engine: E,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
 	portals: HashMap<String, Option<BoundPortal<E>>>,
-	_marker: std::marker::PhantomData<S>,
 }
 
-impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
+impl<E: Engine> Connection<E> {
 	/// Create a new connection from an engine instance.
 	pub fn new(engine: E) -> Self {
 		Self {
@@ -62,7 +61,6 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 			statements: HashMap::new(),
 			portals: HashMap::new(),
 			engine,
-			_marker: std::marker::PhantomData,
 		}
 	}
 
@@ -103,7 +101,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 	async fn step(
 		&mut self,
-		framed: &mut Framed<S, ConnectionCodec>,
+		framed: &mut Framed<impl AsyncRead + AsyncWrite + Unpin, ConnectionCodec>,
 	) -> Result<Option<ConnectionState>, ConnectionError> {
 		match self.state {
 			ConnectionState::Startup => {
@@ -255,7 +253,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 
 	/// Given a stream (typically TCP), extract Postgres protocol messages and respond accordingly.
 	/// This function only returns when the connection is closed (either gracefully or due to an error).
-	pub async fn run(&mut self, stream: S) -> Result<(), ConnectionError> {
+	pub async fn run(&mut self, stream: impl AsyncRead + AsyncWrite + Unpin) -> Result<(), ConnectionError> {
 		let mut framed = Framed::new(stream, ConnectionCodec::new());
 		loop {
 			let new_state = match self.step(&mut framed).await {
