@@ -145,7 +145,7 @@ impl<E: Engine, S: AsyncRead + AsyncWrite + Unpin> Connection<E, S> {
 							parse.prepared_statement_name,
 							PreparedStatement {
 								fields: match &parsed_statement {
-									Some(statement) => self.engine.prepare(&statement).await?,
+									Some(statement) => self.engine.prepare(statement).await?,
 									None => vec![],
 								},
 								statement: parsed_statement,

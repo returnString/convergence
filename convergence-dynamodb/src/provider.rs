@@ -104,8 +104,8 @@ impl TableProvider for DynamoDbTableProvider {
 		for filter in filters {
 			// update once matching on smart ptrs is stabilised
 			if let Expr::BinaryExpr { left, op, right } = filter {
-				if let (Expr::Column(column_name), Operator::Eq, Expr::Literal(value)) = (&**left, op, &**right) {
-					if column_name == self.def.hash_key() {
+				if let (Expr::Column(column), Operator::Eq, Expr::Literal(value)) = (&**left, op, &**right) {
+					if column.name == self.def.hash_key() {
 						hash_key_eq = Some(value.to_string());
 					}
 				}
