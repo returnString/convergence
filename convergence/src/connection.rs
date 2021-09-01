@@ -44,7 +44,7 @@ struct BoundPortal<E: Engine> {
 	pub row_desc: RowDescription,
 }
 
-/// Describes a connection using a specific engine and stream type.
+/// Describes a connection using a specific engine.
 /// Contains connection state including prepared statements and portals.
 pub struct Connection<E: Engine> {
 	engine: E,
