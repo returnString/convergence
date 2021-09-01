@@ -1,6 +1,6 @@
-use arrow::array::{ArrayRef, Int32Builder, StringBuilder, UInt32Builder};
-use arrow::datatypes::{Field, Schema};
-use arrow::record_batch::RecordBatch;
+use datafusion::arrow::array::{ArrayRef, Int32Builder, StringBuilder, UInt32Builder};
+use datafusion::arrow::datatypes::{Field, Schema};
+use datafusion::arrow::record_batch::RecordBatch;
 use datafusion::catalog::catalog::CatalogProvider;
 use datafusion::catalog::schema::{MemorySchemaProvider, SchemaProvider};
 use datafusion::datasource::{MemTable, TableProvider};
@@ -132,7 +132,7 @@ impl MetadataBuilder {
 			let table_oid = self.alloc_oid();
 
 			self.pg_tables.add_row(schema_name, &table_name)?;
-			self.pg_namespace.add_row(schema_oid, &schema_name)?;
+			self.pg_namespace.add_row(schema_oid, schema_name)?;
 			self.pg_class.add_row(table_oid, &table_name, schema_oid, "r")?;
 			let desc_oid = self.alloc_oid();
 			self.pg_description.add_row(desc_oid, table_oid, 0, "")?;

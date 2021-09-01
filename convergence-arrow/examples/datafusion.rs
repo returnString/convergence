@@ -1,7 +1,7 @@
-use arrow::datatypes::DataType;
 use convergence::server::{self, BindOptions};
 use convergence_arrow::datafusion::DataFusionEngine;
 use convergence_arrow::metadata::Catalog;
+use datafusion::arrow::datatypes::DataType;
 use datafusion::catalog::catalog::MemoryCatalogProvider;
 use datafusion::catalog::schema::MemorySchemaProvider;
 use datafusion::physical_plan::ColumnarValue;
