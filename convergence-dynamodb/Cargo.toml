@@ -1,6 +1,6 @@
 [package]
 name = "convergence-dynamodb"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Ruan Pearce-Authers <ruan@reservoirdb.com>"]
 edition = "2018"
 description = "Utils for bridging DynamoDB and PostgreSQL's wire protocol"

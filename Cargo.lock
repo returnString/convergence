@@ -239,7 +239,7 @@ checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
 name = "convergence"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -254,7 +254,7 @@ dependencies = [
 
 [[package]]
 name = "convergence-arrow"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -267,7 +267,7 @@ dependencies = [
 
 [[package]]
 name = "convergence-dynamodb"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "async-trait",
  "convergence",
