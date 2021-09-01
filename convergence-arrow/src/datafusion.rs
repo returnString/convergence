@@ -1,3 +1,5 @@
+//! Provides a DataFusion-powered implementation of the [Engine] trait.
+
 use crate::table::{record_batch_to_rows, schema_to_field_desc};
 use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
@@ -12,6 +14,7 @@ fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 	ErrorResponse::error(SqlState::DATA_EXCEPTION, err.to_string())
 }
 
+/// A portal built using a logical DataFusion query plan.
 pub struct DataFusionPortal {
 	df: Arc<dyn DataFrame>,
 }
@@ -26,11 +29,13 @@ impl Portal for DataFusionPortal {
 	}
 }
 
+/// An engine instance using DataFusion for catalogue management and queries.
 pub struct DataFusionEngine {
 	ctx: ExecutionContext,
 }
 
 impl DataFusionEngine {
+	/// Creates a new engine instance using the given DataFusion execution context.
 	pub fn new(ctx: ExecutionContext) -> Self {
 		Self { ctx }
 	}

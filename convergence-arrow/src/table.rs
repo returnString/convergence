@@ -1,3 +1,5 @@
+//! Utilities for converting between Arrow and Postgres formats.
+
 use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use datafusion::arrow::array::{
@@ -23,6 +25,7 @@ macro_rules! array_val {
 	};
 }
 
+/// Writes the contents of an Arrow [RecordBatch] into a Postgres [DataRowBatch].
 pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 	for row_idx in 0..arrow_batch.num_rows() {
 		let mut row = pg_batch.create_row();
@@ -84,6 +87,7 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 	Ok(())
 }
 
+/// Converts an Arrow [DataType] into a Postgres [DataTypeOid].
 pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 	Ok(match ty {
 		DataType::Int8 | DataType::Int16 => DataTypeOid::Int2,
@@ -108,6 +112,7 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 	})
 }
 
+/// Converts an Arrow [Schema] into a vector of Postgres [FieldDescription] instances.
 pub fn schema_to_field_desc(schema: &Schema) -> Result<Vec<FieldDescription>, ErrorResponse> {
 	schema
 		.fields()
