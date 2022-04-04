@@ -9,7 +9,7 @@ repository = "https://github.com/reservoirdb/convergence"
 
 [dependencies]
 tokio = { version = "1.16" }
-sqlparser = "0.13"
+sqlparser = "0.16"
 async-trait = "0.1"
 datafusion = "5.0.0"
 convergence = { path = "../convergence", version = "0.3.0" }

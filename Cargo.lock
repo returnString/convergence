@@ -227,7 +227,7 @@ dependencies = [
  "bytes",
  "chrono",
  "futures",
- "sqlparser 0.13.0",
+ "sqlparser 0.16.0",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -242,7 +242,7 @@ dependencies = [
  "chrono",
  "convergence",
  "datafusion",
- "sqlparser 0.13.0",
+ "sqlparser 0.16.0",
  "tokio",
  "tokio-postgres",
 ]
@@ -257,7 +257,7 @@ dependencies = [
  "datafusion",
  "rusoto_core",
  "rusoto_dynamodb",
- "sqlparser 0.13.0",
+ "sqlparser 0.16.0",
  "thiserror",
  "tokio",
  "tokio-postgres",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "sqlparser"
-version = "0.13.0"
+version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9907f54bd0f7b6ce72c2be1e570a614819ee08e3deb66d90480df341d8a12a8"
+checksum = "7e9a527b68048eb95495a1508f6c8395c8defcff5ecdbe8ad4106d08a2ef2a3c"
 dependencies = [
  "log",
 ]
