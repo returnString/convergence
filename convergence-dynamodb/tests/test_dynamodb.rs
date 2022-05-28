@@ -13,8 +13,8 @@ use tokio_postgres::{connect, NoTls};
 use uuid::Uuid;
 
 async fn new_engine() -> DataFusionEngine {
-	let ddb_hash_table_name = Uuid::new_v4().to_simple().to_string();
-	let ddb_composite_table_name = Uuid::new_v4().to_simple().to_string();
+	let ddb_hash_table_name = Uuid::new_v4().simple().to_string();
+	let ddb_composite_table_name = Uuid::new_v4().simple().to_string();
 
 	// use the extended client init to avoid issues in rusoto's usage of hyper
 	// https://github.com/hyperium/hyper/issues/2112
