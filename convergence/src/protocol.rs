@@ -138,6 +138,7 @@ pub struct Execute {
 
 #[derive(Debug)]
 pub enum ClientMessage {
+	SSLRequest, // for SSL negotiation
 	Startup(Startup),
 	Parse(Parse),
 	Describe(Describe),
@@ -415,6 +416,11 @@ impl Decoder for ConnectionCodec {
 			let protocol_version_major = header_buf.get_i16();
 			let protocol_version_minor = header_buf.get_i16();
 
+			if protocol_version_major == 1234i16 && protocol_version_minor == 5679i16 {
+				src.advance(STARTUP_HEADER_SIZE);
+				return Ok(Some(ClientMessage::SSLRequest));
+			}
+
 			if src.len() < message_len {
 				src.reserve(message_len - src.len());
 				return Ok(None);
@@ -562,6 +568,15 @@ impl<T: BackendMessage> Encoder<T> for ConnectionCodec {
 		dst.put_u8(T::TAG);
 		dst.put_i32((body.len() + 4) as i32);
 		dst.put_slice(&body);
+		Ok(())
+	}
+}
+
+impl Encoder<char> for ConnectionCodec {
+	type Error = ProtocolError;
+
+	fn encode(&mut self, item: char, dst: &mut BytesMut) -> Result<(), Self::Error> {
+		dst.put_u8(item as u8);
 		Ok(())
 	}
 }
