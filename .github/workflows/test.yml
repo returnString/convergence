@@ -25,9 +25,6 @@ jobs:
       with:
         toolchain: ${{ matrix.toolchain }}
 
-    - name: Boot test dependencies
-      run: docker-compose up -d
-
     - name: Run tests
       uses: actions-rs/cargo@v1.0.3
       with:
