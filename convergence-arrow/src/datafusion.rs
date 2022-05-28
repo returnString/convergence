@@ -16,7 +16,7 @@ fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 
 /// A portal built using a logical DataFusion query plan.
 pub struct DataFusionPortal {
-	df: Arc<dyn DataFrame>,
+	df: Arc<DataFrame>,
 }
 
 #[async_trait]
@@ -31,12 +31,12 @@ impl Portal for DataFusionPortal {
 
 /// An engine instance using DataFusion for catalogue management and queries.
 pub struct DataFusionEngine {
-	ctx: ExecutionContext,
+	ctx: SessionContext,
 }
 
 impl DataFusionEngine {
 	/// Creates a new engine instance using the given DataFusion execution context.
-	pub fn new(ctx: ExecutionContext) -> Self {
+	pub fn new(ctx: SessionContext) -> Self {
 		Self { ctx }
 	}
 }
@@ -46,12 +46,12 @@ impl Engine for DataFusionEngine {
 	type PortalType = DataFusionPortal;
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
-		let plan = self.ctx.sql(&statement.to_string()).map_err(df_err_to_sql)?;
+		let plan = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
 		schema_to_field_desc(&plan.schema().clone().into())
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
-		let df = self.ctx.sql(&statement.to_string()).map_err(df_err_to_sql)?;
+		let df = self.ctx.sql(&statement.to_string()).await.map_err(df_err_to_sql)?;
 		Ok(DataFusionPortal { df })
 	}
 }

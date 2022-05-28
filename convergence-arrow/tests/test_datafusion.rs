@@ -5,8 +5,9 @@ use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
 
 async fn new_engine() -> DataFusionEngine {
-	let mut ctx = ExecutionContext::new();
+	let ctx = SessionContext::new();
 	ctx.register_csv("test_100_4buckets", "data/100_4buckets.csv", CsvReadOptions::new())
+		.await
 		.expect("failed to register csv");
 
 	DataFusionEngine::new(ctx)
