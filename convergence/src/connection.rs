@@ -266,6 +266,7 @@ impl<E: Engine> Connection<E> {
 						return Err(err_info.into());
 					}
 
+					framed.send(ReadyForQuery).await?;
 					ConnectionState::Idle
 				}
 				Err(err) => {
