@@ -109,6 +109,12 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Startup(_startup) => {
 						// do startup stuff
 					}
+					ClientMessage::SSLRequest => {
+						// we don't support SSL for now
+						// client will retry with startup packet
+						framed.send('N').await?;
+						return Ok(Some(ConnectionState::Startup));
+					}
 					_ => {
 						return Err(
 							ErrorResponse::fatal(SqlState::PROTOCOL_VIOLATION, "expected startup message").into(),
