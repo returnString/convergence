@@ -14,7 +14,7 @@ async-trait = "0.1"
 datafusion = "5.0.0"
 convergence = { path = "../convergence", version = "0.3.0" }
 convergence-arrow = { path = "../convergence-arrow", version = "0.3.0" }
-rusoto_core = "0.47.0"
+rusoto_core = "0.48.0"
 rusoto_dynamodb = "0.47.0"
 thiserror = "1.0"
 
