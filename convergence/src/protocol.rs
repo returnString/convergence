@@ -61,8 +61,12 @@ macro_rules! data_types {
 	};
 }
 
+// For oid see:
+// https://github.com/sfackler/rust-postgres/blob/master/postgres-types/src/type_gen.rs
 data_types! {
 	Unspecified = 0, 0
+
+	Bool = 16, 1
 
 	Int2 = 21, 2
 	Int4 = 23, 4

@@ -3,9 +3,9 @@
 use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use datafusion::arrow::array::{
-	Date32Array, Date64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
-	TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array,
-	UInt32Array, UInt64Array, UInt8Array,
+	BooleanArray, Date32Array, Date64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array,
+	StringArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
+	UInt16Array, UInt32Array, UInt64Array, UInt8Array,
 };
 use datafusion::arrow::datatypes::{DataType, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
@@ -35,6 +35,7 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 				row.write_null();
 			} else {
 				match col.data_type() {
+					DataType::Boolean => row.write_bool(array_val!(BooleanArray, col, row_idx) as bool),
 					DataType::Int8 => row.write_int2(array_val!(Int8Array, col, row_idx) as i16),
 					DataType::Int16 => row.write_int2(array_val!(Int16Array, col, row_idx)),
 					DataType::Int32 => row.write_int4(array_val!(Int32Array, col, row_idx)),
@@ -90,6 +91,7 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 /// Converts an Arrow [DataType] into a Postgres [DataTypeOid].
 pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 	Ok(match ty {
+		DataType::Boolean => DataTypeOid::Bool,
 		DataType::Int8 | DataType::Int16 => DataTypeOid::Int2,
 		DataType::Int32 => DataTypeOid::Int4,
 		DataType::Int64 => DataTypeOid::Int8,
