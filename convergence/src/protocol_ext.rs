@@ -88,6 +88,17 @@ impl<'a> DataRowWriter<'a> {
 		self.write_value(val.as_bytes());
 	}
 
+	/// Writes a bool value for the next column.
+	pub fn write_bool(&mut self, val: bool) {
+		match self.parent.format_code {
+			FormatCode::Text => self.write_value(if val { "t" } else { "f" }.as_bytes()),
+			FormatCode::Binary => {
+				self.current_col += 1;
+				self.parent.row.put_u8(val as u8);
+			}
+		};
+	}
+
 	fn pg_date_epoch() -> NaiveDate {
 		NaiveDate::from_ymd(2000, 1, 1)
 	}
