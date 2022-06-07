@@ -3,9 +3,9 @@
 use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
 use datafusion::arrow::array::{
-	BooleanArray, Date32Array, Date64Array, Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array,
-	StringArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
-	UInt16Array, UInt32Array, UInt64Array, UInt8Array,
+	BooleanArray, Date32Array, Date64Array, Float16Array, Float32Array, Float64Array, Int16Array, Int32Array,
+	Int64Array, Int8Array, StringArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
+	TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array, UInt8Array,
 };
 use datafusion::arrow::datatypes::{DataType, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
@@ -44,6 +44,7 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 					DataType::UInt16 => row.write_int2(array_val!(UInt16Array, col, row_idx) as i16),
 					DataType::UInt32 => row.write_int4(array_val!(UInt32Array, col, row_idx) as i32),
 					DataType::UInt64 => row.write_int8(array_val!(UInt64Array, col, row_idx) as i64),
+					DataType::Float16 => row.write_float4(array_val!(Float16Array, col, row_idx).to_f32()),
 					DataType::Float32 => row.write_float4(array_val!(Float32Array, col, row_idx)),
 					DataType::Float64 => row.write_float8(array_val!(Float64Array, col, row_idx)),
 					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
@@ -99,8 +100,7 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 		DataType::UInt8 | DataType::UInt16 => DataTypeOid::Int2,
 		DataType::UInt32 => DataTypeOid::Int4,
 		DataType::UInt64 => DataTypeOid::Int8,
-		// TODO: DataType::Float16 exists and could be mapped to Float4, but there's no Float16Array
-		DataType::Float32 => DataTypeOid::Float4,
+		DataType::Float16 | DataType::Float32 => DataTypeOid::Float4,
 		DataType::Float64 => DataTypeOid::Float8,
 		DataType::Utf8 => DataTypeOid::Text,
 		DataType::Date32 | DataType::Date64 => DataTypeOid::Date,
