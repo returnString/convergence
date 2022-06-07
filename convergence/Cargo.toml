@@ -1,19 +1,19 @@
 [package]
 name = "convergence"
 version = "0.4.1"
-authors = ["Ruan Pearce-Authers <ruan@reservoirdb.com>"]
+authors = ["Ruan Pearce-Authers <ruanpa@outlook.com>"]
 edition = "2018"
 description = "Write servers that speak PostgreSQL's wire protocol"
 license = "MIT"
-repository = "https://github.com/reservoirdb/convergence"
+repository = "https://github.com/returnString/convergence"
 
 [dependencies]
-tokio = { version = "1.16", features = [ "net", "rt-multi-thread", "macros", "io-util", "io-std" ] }
+tokio = { version = "1", features = [ "net", "rt-multi-thread", "macros", "io-util", "io-std" ] }
 tokio-util = { version = "0.7", features = [ "codec" ] }
-thiserror = "1.0"
-bytes = "1.0"
+thiserror = "1"
+bytes = "1"
 futures = "0.3"
-sqlparser = "0.17"
+sqlparser = "0.18"
 async-trait = "0.1"
 chrono = "0.4"
 
