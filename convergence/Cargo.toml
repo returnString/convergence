@@ -1,6 +1,6 @@
 [package]
 name = "convergence"
-version = "0.4.1"
+version = "0.5.0"
 authors = ["Ruan Pearce-Authers <ruanpa@outlook.com>"]
 edition = "2018"
 description = "Write servers that speak PostgreSQL's wire protocol"
