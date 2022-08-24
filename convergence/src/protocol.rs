@@ -159,7 +159,7 @@ pub trait BackendMessage: std::fmt::Debug {
 	fn encode(&self, dst: &mut BytesMut);
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SqlState(pub &'static str);
 
 impl SqlState {
@@ -174,7 +174,7 @@ impl SqlState {
 	pub const INVALID_DATETIME_FORMAT: SqlState = SqlState("22007");
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Severity(pub &'static str);
 
 impl Severity {
