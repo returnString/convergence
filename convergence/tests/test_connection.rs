@@ -26,7 +26,7 @@ impl Engine for ReturnSingleScalarEngine {
 
 	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
 		if let Statement::Query(query) = &statement {
-			if let SetExpr::Select(select) = &query.body {
+			if let SetExpr::Select(select) = &*query.body {
 				if select.projection.len() == 1 {
 					if let SelectItem::UnnamedExpr(Expr::Identifier(column_name)) = &select.projection[0] {
 						match column_name.value.as_str() {
