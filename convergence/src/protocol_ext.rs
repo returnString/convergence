@@ -100,7 +100,13 @@ impl<'a> DataRowWriter<'a> {
 	}
 
 	fn pg_date_epoch() -> NaiveDate {
-		NaiveDate::from_ymd(2000, 1, 1)
+		NaiveDate::from_ymd_opt(2000, 1, 1).expect("failed to create pg date epoch")
+	}
+
+	fn pg_timestamp_epoch() -> NaiveDateTime {
+		Self::pg_date_epoch()
+			.and_hms_opt(0, 0, 0)
+			.expect("failed to create pg timestamp epoch")
 	}
 
 	/// Writes a date value for the next column.
@@ -116,7 +122,7 @@ impl<'a> DataRowWriter<'a> {
 		match self.parent.format_code {
 			FormatCode::Binary => {
 				self.write_int8(
-					val.signed_duration_since(Self::pg_date_epoch().and_hms(0, 0, 0))
+					val.signed_duration_since(Self::pg_timestamp_epoch())
 						.num_microseconds()
 						.unwrap(),
 				);

@@ -100,8 +100,11 @@ async fn basic_data_types() {
 			1,
 			1.5,
 			"a",
-			NaiveDate::from_ymd(2020, 1, 1).and_hms(0, 0, 0),
-			NaiveDate::from_ymd(1970, 1, 1),
+			NaiveDate::from_ymd_opt(2020, 1, 1)
+				.unwrap()
+				.and_hms_opt(0, 0, 0)
+				.unwrap(),
+			NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
 		)
 	);
 	assert_eq!(
@@ -110,8 +113,11 @@ async fn basic_data_types() {
 			2,
 			2.5,
 			"b",
-			NaiveDate::from_ymd(2020, 2, 1).and_hms(0, 0, 0),
-			NaiveDate::from_ymd(1970, 1, 2)
+			NaiveDate::from_ymd_opt(2020, 2, 1)
+				.unwrap()
+				.and_hms_opt(0, 0, 0)
+				.unwrap(),
+			NaiveDate::from_ymd_opt(1970, 1, 2).unwrap()
 		)
 	);
 	assert_eq!(
@@ -120,8 +126,11 @@ async fn basic_data_types() {
 			3,
 			3.5,
 			"c",
-			NaiveDate::from_ymd(2020, 3, 1).and_hms(0, 0, 0),
-			NaiveDate::from_ymd(1970, 1, 3)
+			NaiveDate::from_ymd_opt(2020, 3, 1)
+				.unwrap()
+				.and_hms_opt(0, 0, 0)
+				.unwrap(),
+			NaiveDate::from_ymd_opt(1970, 1, 3).unwrap()
 		)
 	);
 }
