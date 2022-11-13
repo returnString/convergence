@@ -32,10 +32,7 @@ impl ArrowEngine {
 		let int_col = Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef;
 		let float_col = Arc::new(Float32Array::from(vec![1.5, 2.5, 3.5])) as ArrayRef;
 		let string_col = Arc::new(StringArray::from(vec!["a", "b", "c"])) as ArrayRef;
-		let ts_col = Arc::new(TimestampSecondArray::from_vec(
-			vec![1577836800, 1580515200, 1583020800],
-			None,
-		)) as ArrayRef;
+		let ts_col = Arc::new(TimestampSecondArray::from(vec![1577836800, 1580515200, 1583020800])) as ArrayRef;
 		let date_col = Arc::new(Date32Array::from(vec![0, 1, 2])) as ArrayRef;
 
 		let schema = Schema::new(vec![
