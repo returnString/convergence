@@ -55,7 +55,7 @@ impl Engine for ArrowEngine {
 	type PortalType = ArrowPortal;
 
 	async fn prepare(&mut self, _: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
-		schema_to_field_desc(&self.batch.schema())
+		schema_to_field_desc(&*self.batch.schema())
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
