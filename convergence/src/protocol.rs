@@ -488,7 +488,7 @@ impl Decoder for ConnectionCodec {
 				let prepared_statement_name = read_cstr(src)?;
 				let query = read_cstr(src)?;
 				let num_params = src.get_i16();
-				let _params: Vec<_> = (0..num_params).into_iter().map(|_| src.get_u32()).collect();
+				let _params: Vec<_> = (0..num_params).map(|_| src.get_u32()).collect();
 
 				ClientMessage::Parse(Parse {
 					prepared_statement_name,

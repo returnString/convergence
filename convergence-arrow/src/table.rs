@@ -35,7 +35,7 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 				row.write_null();
 			} else {
 				match col.data_type() {
-					DataType::Boolean => row.write_bool(array_val!(BooleanArray, col, row_idx) as bool),
+					DataType::Boolean => row.write_bool(array_val!(BooleanArray, col, row_idx)),
 					DataType::Int8 => row.write_int2(array_val!(Int8Array, col, row_idx) as i16),
 					DataType::Int16 => row.write_int2(array_val!(Int16Array, col, row_idx)),
 					DataType::Int32 => row.write_int4(array_val!(Int32Array, col, row_idx)),
