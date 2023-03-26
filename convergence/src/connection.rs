@@ -112,7 +112,7 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::SSLRequest => {
 						// we don't support SSL for now
 						// client will retry with startup packet
-						framed.send('N').await?;
+						framed.send(SSLResponse(false)).await?;
 						return Ok(Some(ConnectionState::Startup));
 					}
 					_ => {

@@ -597,11 +597,13 @@ impl<T: BackendMessage> Encoder<T> for ConnectionCodec {
 	}
 }
 
-impl Encoder<char> for ConnectionCodec {
+pub struct SSLResponse(pub bool);
+
+impl Encoder<SSLResponse> for ConnectionCodec {
 	type Error = ProtocolError;
 
-	fn encode(&mut self, item: char, dst: &mut BytesMut) -> Result<(), Self::Error> {
-		dst.put_u8(item as u8);
+	fn encode(&mut self, item: SSLResponse, dst: &mut BytesMut) -> Result<(), Self::Error> {
+		dst.put_u8(if item.0 { b'S' } else { b'N' });
 		Ok(())
 	}
 }
