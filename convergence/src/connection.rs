@@ -68,32 +68,32 @@ impl<E: Engine> Connection<E> {
 		Ok(self
 			.statements
 			.get(name)
-			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_SQL_STATEMENT_NAME, "missing statement"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidSQLStatementName, "missing statement"))?)
 	}
 
 	fn portal(&self, name: &str) -> Result<&Option<BoundPortal<E>>, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
-			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidCursorName, "missing portal"))?)
 	}
 
 	fn portal_mut(&mut self, name: &str) -> Result<&mut Option<BoundPortal<E>>, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
-			.ok_or_else(|| ErrorResponse::error(SqlState::INVALID_CURSOR_NAME, "missing portal"))?)
+			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidCursorName, "missing portal"))?)
 	}
 
 	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ErrorResponse> {
 		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)
-			.map_err(|err| ErrorResponse::error(SqlState::SYNTAX_ERROR, err.to_string()))?;
+			.map_err(|err| ErrorResponse::error(SqlState::SyntaxError, err.to_string()))?;
 
 		match statements.len() {
 			0 => Ok(None),
 			1 => Ok(Some(statements[0].clone())),
 			_ => Err(ErrorResponse::error(
-				SqlState::SYNTAX_ERROR,
+				SqlState::SyntaxError,
 				"expected zero or one statements",
 			)),
 		}
@@ -117,7 +117,7 @@ impl<E: Engine> Connection<E> {
 					}
 					_ => {
 						return Err(
-							ErrorResponse::fatal(SqlState::PROTOCOL_VIOLATION, "expected startup message").into(),
+							ErrorResponse::fatal(SqlState::ProtocolViolation, "expected startup message").into(),
 						)
 					}
 				}
@@ -162,7 +162,7 @@ impl<E: Engine> Connection<E> {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
 								return Err(ErrorResponse::error(
-									SqlState::FEATURE_NOT_SUPPORTED,
+									SqlState::FeatureNotSupported,
 									"per-column format codes not supported",
 								)
 								.into());
@@ -249,7 +249,7 @@ impl<E: Engine> Connection<E> {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
-					_ => return Err(ErrorResponse::error(SqlState::PROTOCOL_VIOLATION, "unexpected message").into()),
+					_ => return Err(ErrorResponse::error(SqlState::ProtocolViolation, "unexpected message").into()),
 				};
 
 				Ok(Some(ConnectionState::Idle))
@@ -268,7 +268,7 @@ impl<E: Engine> Connection<E> {
 				Err(ConnectionError::ErrorResponse(err_info)) => {
 					framed.send(err_info.clone()).await?;
 
-					if err_info.severity == Severity::FATAL {
+					if err_info.severity == Severity::Fatal {
 						return Err(err_info.into());
 					}
 
@@ -277,7 +277,7 @@ impl<E: Engine> Connection<E> {
 				}
 				Err(err) => {
 					framed
-						.send(ErrorResponse::fatal(SqlState::CONNECTION_EXCEPTION, "connection error"))
+						.send(ErrorResponse::fatal(SqlState::ConnectionException, "connection error"))
 						.await?;
 					return Err(err);
 				}

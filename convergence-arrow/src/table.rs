@@ -50,12 +50,12 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 					DataType::Utf8 => row.write_string(array_val!(StringArray, col, row_idx)),
 					DataType::Date32 => {
 						row.write_date(array_val!(Date32Array, col, row_idx, value_as_date).ok_or_else(|| {
-							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported date type")
+							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported date type")
 						})?)
 					}
 					DataType::Date64 => {
 						row.write_date(array_val!(Date64Array, col, row_idx, value_as_date).ok_or_else(|| {
-							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported date type")
+							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported date type")
 						})?)
 					}
 					DataType::Timestamp(unit, None) => row.write_timestamp(
@@ -72,12 +72,12 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 							}
 						}
 						.ok_or_else(|| {
-							ErrorResponse::error(SqlState::INVALID_DATETIME_FORMAT, "unsupported timestamp type")
+							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported timestamp type")
 						})?,
 					),
 					other => {
 						return Err(ErrorResponse::error(
-							SqlState::FEATURE_NOT_SUPPORTED,
+							SqlState::FeatureNotSupported,
 							format!("arrow to pg conversion not implemented for {}", other),
 						))
 					}
@@ -107,7 +107,7 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 		DataType::Timestamp(_, None) => DataTypeOid::Timestamp,
 		other => {
 			return Err(ErrorResponse::error(
-				SqlState::FEATURE_NOT_SUPPORTED,
+				SqlState::FeatureNotSupported,
 				format!("arrow to pg conversion not implemented for {}", other),
 			))
 		}

@@ -10,7 +10,7 @@ use datafusion::prelude::*;
 use sqlparser::ast::Statement;
 
 fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
-	ErrorResponse::error(SqlState::DATA_EXCEPTION, err.to_string())
+	ErrorResponse::error(SqlState::DataException, err.to_string())
 }
 
 /// A portal built using a logical DataFusion query plan.

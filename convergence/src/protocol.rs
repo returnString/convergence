@@ -160,26 +160,47 @@ pub trait BackendMessage: std::fmt::Debug {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SqlState(pub &'static str);
+pub enum SqlState {
+	SuccessfulCompletion,
+	FeatureNotSupported,
+	InvalidCursorName,
+	ConnectionException,
+	InvalidSQLStatementName,
+	DataException,
+	ProtocolViolation,
+	SyntaxError,
+	InvalidDatetimeFormat,
+}
 
 impl SqlState {
-	pub const SUCCESSFUL_COMPLETION: SqlState = SqlState("00000");
-	pub const FEATURE_NOT_SUPPORTED: SqlState = SqlState("0A000");
-	pub const INVALID_CURSOR_NAME: SqlState = SqlState("34000");
-	pub const CONNECTION_EXCEPTION: SqlState = SqlState("08000");
-	pub const INVALID_SQL_STATEMENT_NAME: SqlState = SqlState("26000");
-	pub const DATA_EXCEPTION: SqlState = SqlState("22000");
-	pub const PROTOCOL_VIOLATION: SqlState = SqlState("08P01");
-	pub const SYNTAX_ERROR: SqlState = SqlState("42601");
-	pub const INVALID_DATETIME_FORMAT: SqlState = SqlState("22007");
+	pub fn code(&self) -> &str {
+		match self {
+			Self::SuccessfulCompletion => "00000",
+			Self::FeatureNotSupported => "0A000",
+			Self::InvalidCursorName => "34000",
+			Self::ConnectionException => "08000",
+			Self::InvalidSQLStatementName => "26000",
+			Self::DataException => "22000",
+			Self::ProtocolViolation => "08P01",
+			Self::SyntaxError => "42601",
+			Self::InvalidDatetimeFormat => "22007",
+		}
+	}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Severity(pub &'static str);
+pub enum Severity {
+	Error,
+	Fatal,
+}
 
 impl Severity {
-	pub const ERROR: Severity = Severity("ERROR");
-	pub const FATAL: Severity = Severity("FATAL");
+	pub fn code(&self) -> &str {
+		match self {
+			Self::Fatal => "FATAL",
+			Self::Error => "ERROR",
+		}
+	}
 }
 
 #[derive(thiserror::Error, Debug, Clone)]
@@ -199,11 +220,11 @@ impl ErrorResponse {
 	}
 
 	pub fn error(sql_state: SqlState, message: impl Into<String>) -> Self {
-		Self::new(sql_state, Severity::ERROR, message)
+		Self::new(sql_state, Severity::Error, message)
 	}
 
 	pub fn fatal(sql_state: SqlState, message: impl Into<String>) -> Self {
-		Self::new(sql_state, Severity::FATAL, message)
+		Self::new(sql_state, Severity::Error, message)
 	}
 }
 
@@ -218,10 +239,10 @@ impl BackendMessage for ErrorResponse {
 
 	fn encode(&self, dst: &mut BytesMut) {
 		dst.put_u8(b'C');
-		dst.put_slice(self.sql_state.0.as_bytes());
+		dst.put_slice(self.sql_state.code().as_bytes());
 		dst.put_u8(0);
 		dst.put_u8(b'S');
-		dst.put_slice(self.severity.0.as_bytes());
+		dst.put_slice(self.severity.code().as_bytes());
 		dst.put_u8(0);
 		dst.put_u8(b'M');
 		dst.put_slice(self.message.as_bytes());
