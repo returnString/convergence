@@ -11,7 +11,7 @@ repository = "https://github.com/returnString/convergence"
 tokio = { version = "1" }
 sqlparser = "0.32"
 async-trait = "0.1"
-datafusion = "19"
+datafusion = "21"
 convergence = { path = "../convergence", version = "0.10.0" }
 chrono = "0.4"
 
