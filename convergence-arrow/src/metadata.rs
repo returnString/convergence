@@ -1,3 +1,5 @@
+//! Supports generating Postgres metadata from a DataFusion catalog.
+
 use datafusion::arrow::array::{ArrayRef, Int32Builder, StringBuilder, UInt32Builder};
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
@@ -17,7 +19,7 @@ macro_rules! table_builder {
 		impl $type {
 			fn new() -> Self {
 				Self {
-					$($field_name: <$builder_type>::new(0),)*
+					$($field_name: <$builder_type>::new(),)*
 				}
 			}
 
@@ -26,7 +28,7 @@ macro_rules! table_builder {
 				&mut self,
 				$($field_name: $param_type,)*
 			) -> Result<(), DataFusionError> {
-				$(self.$field_name.append_value($field_name)?;)*
+				$(self.$field_name.append_value($field_name);)*
 				Ok(())
 			}
 		}
@@ -43,7 +45,7 @@ macro_rules! table_builder {
 					$(stringify!($field_name),)*
 				];
 
-				let fields = columns.iter().zip(column_names).map(|(c, name)| Field::new(name, c.data_type().clone(), true)).collect();
+				let fields = columns.iter().zip(column_names).map(|(c, name)| Field::new(name.to_owned(), c.data_type().clone(), true)).collect();
 				let schema = Arc::new(Schema::new(fields));
 				let batch = RecordBatch::try_new(schema, columns)?;
 				Ok(Arc::new(MemTable::try_new(batch.schema(), vec![vec![batch]])?))
@@ -124,11 +126,6 @@ impl MetadataBuilder {
 		let schema_oid = self.alloc_oid();
 
 		for table_name in schema.table_names() {
-			let _table = match schema.table(&table_name) {
-				Some(s) => s,
-				None => continue,
-			};
-
 			let table_oid = self.alloc_oid();
 
 			self.pg_tables.add_row(schema_name, &table_name)?;
@@ -155,11 +152,13 @@ impl MetadataBuilder {
 	}
 }
 
+/// Wrapper catalog supporting generation of pg metadata (e.g. pg_catalog schema).
 pub struct Catalog {
 	wrapped: Arc<dyn CatalogProvider>,
 }
 
 impl Catalog {
+	/// Create a new wrapper catalog that provides postgres metadata for the contained objects.
 	pub fn new(wrapped: Arc<dyn CatalogProvider>) -> Self {
 		Self { wrapped }
 	}
