@@ -45,7 +45,7 @@ macro_rules! table_builder {
 					$(stringify!($field_name),)*
 				];
 
-				let fields = columns.iter().zip(column_names).map(|(c, name)| Field::new(name.to_owned(), c.data_type().clone(), true)).collect();
+				let fields: Vec<_> = columns.iter().zip(column_names).map(|(c, name)| Field::new(name.to_owned(), c.data_type().clone(), true)).collect();
 				let schema = Arc::new(Schema::new(fields));
 				let batch = RecordBatch::try_new(schema, columns)?;
 				Ok(Arc::new(MemTable::try_new(batch.schema(), vec![vec![batch]])?))
