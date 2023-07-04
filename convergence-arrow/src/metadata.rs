@@ -3,8 +3,8 @@
 use datafusion::arrow::array::{ArrayRef, Int32Builder, StringBuilder, UInt32Builder};
 use datafusion::arrow::datatypes::{Field, Schema};
 use datafusion::arrow::record_batch::RecordBatch;
-use datafusion::catalog::catalog::CatalogProvider;
 use datafusion::catalog::schema::{MemorySchemaProvider, SchemaProvider};
+use datafusion::catalog::CatalogProvider;
 use datafusion::datasource::{MemTable, TableProvider};
 use datafusion::error::DataFusionError;
 use std::convert::TryInto;
