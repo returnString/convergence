@@ -1,6 +1,6 @@
 [package]
 name = "convergence-arrow"
-version = "0.12.0"
+version = "0.13.0"
 authors = ["Ruan Pearce-Authers <ruanpa@outlook.com>"]
 edition = "2018"
 description = "Utils for bridging Apache Arrow and PostgreSQL's wire protocol"
@@ -12,7 +12,7 @@ tokio = { version = "1" }
 sqlparser = "0.36"
 async-trait = "0.1"
 datafusion = "28"
-convergence = { path = "../convergence", version = "0.12.0" }
+convergence = { path = "../convergence", version = "0.13.0" }
 chrono = "0.4"
 
 [dev-dependencies]
