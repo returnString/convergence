@@ -4,11 +4,11 @@ use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
+use convergence::sqlparser::ast::Statement;
 use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
 use datafusion::arrow::array::{ArrayRef, Date32Array, Float32Array, Int32Array, StringArray, TimestampSecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
-use sqlparser::ast::Statement;
 use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
 

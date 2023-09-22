@@ -5,9 +5,9 @@ use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
+use convergence::sqlparser::ast::{Expr, GroupByExpr, Query, Select, SelectItem, SetExpr, Statement, Value};
 use datafusion::error::DataFusionError;
 use datafusion::prelude::*;
-use sqlparser::ast::{Expr, Query, Select, SelectItem, SetExpr, Statement, Value};
 
 fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 	ErrorResponse::error(SqlState::DataException, err.to_string())
@@ -29,7 +29,7 @@ fn dummy_query() -> Statement {
 			cluster_by: vec![],
 			distinct: None,
 			distribute_by: vec![],
-			group_by: vec![],
+			group_by: GroupByExpr::Expressions(vec![]),
 			from: vec![],
 			having: None,
 			lateral_views: vec![],
