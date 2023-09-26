@@ -1,7 +1,7 @@
 //! Contains extensions that make working with the Postgres protocol simpler or more efficient.
 
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
-use bytes::{BufMut, BytesMut};
+use bytes::{BufMut, BytesMut, Bytes};
 use chrono::{NaiveDate, NaiveDateTime};
 use tokio_util::codec::Encoder;
 
@@ -17,11 +17,11 @@ pub struct DataRowBatch {
 }
 
 impl DataRowBatch {
-	/// Creates a new row batch using the given format code, requiring a certain number of columns per row.
-	pub fn new(format_code: FormatCode, num_cols: usize) -> Self {
+	/// Creates a new row batch using the given format code
+	pub fn new(format_code: FormatCode) -> Self {
 		Self {
 			format_code,
-			num_cols,
+			num_cols: 0,
 			num_rows: 0,
 			data: BytesMut::new(),
 			row: BytesMut::new(),
@@ -30,7 +30,13 @@ impl DataRowBatch {
 
 	/// Creates a [DataRowBatch] from the given [RowDescription].
 	pub fn from_row_desc(desc: &RowDescription) -> Self {
-		Self::new(desc.format_code, desc.fields.len())
+		Self {
+			format_code: desc.format_code,
+			num_cols: desc.fields.len(),
+			num_rows: 0,
+			data: BytesMut::new(),
+			row: BytesMut::new(),
+		}
 	}
 
 	/// Starts writing a new row.
@@ -39,6 +45,18 @@ impl DataRowBatch {
 	pub fn create_row(&mut self) -> DataRowWriter {
 		self.num_rows += 1;
 		DataRowWriter::new(self)
+	}
+
+	/// Specify the number of columns
+	/// Allows for column count to be changed after creation.
+	/// Here be dragons, if you have started writing data you will have a terrible time.
+	pub fn set_num_cols(&mut self, num_cols: usize) {
+		self.num_cols = num_cols;
+	}
+
+	/// Returns the number of columns currently written to this batch.
+	pub fn num_cols(&self) -> usize {
+		self.num_cols
 	}
 
 	/// Returns the number of rows currently written to this batch.
@@ -72,6 +90,10 @@ impl<'a> DataRowWriter<'a> {
 	}
 
 	fn write_value(&mut self, data: &[u8]) {
+		assert!(
+			self.current_col < self.parent.num_cols,
+			"tried to write more columns than specified in row description"
+		);
 		self.current_col += 1;
 		self.parent.row.put_i32(data.len() as i32);
 		self.parent.row.put_slice(data);
@@ -81,6 +103,13 @@ impl<'a> DataRowWriter<'a> {
 	pub fn write_null(&mut self) {
 		self.current_col += 1;
 		self.parent.row.put_i32(-1);
+	}
+
+	/// Writes raw bytes for the next column.
+	pub fn write_bytes(&mut self, data: Bytes) {
+		self.current_col += 1;
+		self.parent.row.put_i32(data.len() as i32);
+		self.parent.row.put_slice(data.as_ref());
 	}
 
 	/// Writes a string value for the next column.

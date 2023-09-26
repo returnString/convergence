@@ -1,16 +1,18 @@
 use async_trait::async_trait;
+use bytes::Bytes;
 use chrono::{NaiveDate, NaiveDateTime};
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{ErrorResponse, FieldDescription};
+use convergence::protocol::{ErrorResponse, FieldDescription, StatementDescription, DataTypeOid};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
-use convergence::sqlparser::ast::Statement;
 use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
 use datafusion::arrow::array::{ArrayRef, Date32Array, Float32Array, Int32Array, StringArray, TimestampSecondArray};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
+use sqlparser::ast::Statement;
 use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
+
 
 struct ArrowPortal {
 	batch: RecordBatch,
@@ -18,8 +20,13 @@ struct ArrowPortal {
 
 #[async_trait]
 impl Portal for ArrowPortal {
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+	async fn execute(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		record_batch_to_rows(&self.batch, batch)
+	}
+
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<Vec<FieldDescription>, ErrorResponse> {
+		self.fetch(batch).await?;
+		Ok(vec![])
 	}
 }
 
@@ -54,8 +61,14 @@ impl ArrowEngine {
 impl Engine for ArrowEngine {
 	type PortalType = ArrowPortal;
 
-	async fn prepare(&mut self, _: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
-		schema_to_field_desc(&*self.batch.schema())
+	async fn prepare(&mut self, _: &Statement) -> Result<StatementDescription, ErrorResponse> {
+
+		let fields = schema_to_field_desc(&*self.batch.schema())?;
+
+		Ok(StatementDescription {
+			fields: Some(fields),
+			parameters: None
+		})
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
@@ -63,6 +76,13 @@ impl Engine for ArrowEngine {
 			batch: self.batch.clone(),
 		})
 	}
+
+	async fn create_and_bind_portal(&mut self, _statement: &Statement, _params: Vec<DataTypeOid>, _binding: Vec<Bytes>) -> Result<Self::PortalType, ErrorResponse> {
+		Ok(ArrowPortal {
+			batch: self.batch.clone(),
+		})
+	}
+
 }
 
 async fn setup() -> tokio_postgres::Client {

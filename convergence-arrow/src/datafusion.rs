@@ -2,12 +2,13 @@
 
 use crate::table::{record_batch_to_rows, schema_to_field_desc};
 use async_trait::async_trait;
+use bytes::Bytes;
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{ErrorResponse, FieldDescription, SqlState};
+use convergence::protocol::{ErrorResponse, FieldDescription, SqlState, StatementDescription, DataTypeOid};
 use convergence::protocol_ext::DataRowBatch;
-use convergence::sqlparser::ast::{Expr, GroupByExpr, Query, Select, SelectItem, SetExpr, Statement, Value};
 use datafusion::error::DataFusionError;
 use datafusion::prelude::*;
+use sqlparser::ast::{Expr, Query, Select, SelectItem, SetExpr, Statement, Value};
 
 fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 	ErrorResponse::error(SqlState::DataException, err.to_string())
@@ -29,7 +30,7 @@ fn dummy_query() -> Statement {
 			cluster_by: vec![],
 			distinct: None,
 			distribute_by: vec![],
-			group_by: GroupByExpr::Expressions(vec![]),
+			group_by: vec![],
 			from: vec![],
 			having: None,
 			lateral_views: vec![],
@@ -58,11 +59,16 @@ pub struct DataFusionPortal {
 
 #[async_trait]
 impl Portal for DataFusionPortal {
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+	async fn execute(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		for arrow_batch in self.df.clone().collect().await.map_err(df_err_to_sql)? {
 			record_batch_to_rows(&arrow_batch, batch)?;
 		}
 		Ok(())
+	}
+
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<Vec<FieldDescription>, ErrorResponse> {
+		self.fetch(batch).await?;
+		Ok(vec!())
 	}
 }
 
@@ -82,14 +88,20 @@ impl DataFusionEngine {
 impl Engine for DataFusionEngine {
 	type PortalType = DataFusionPortal;
 
-	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<StatementDescription, ErrorResponse> {
 		let plan = self
 			.ctx
 			.sql(&translate_statement(statement).to_string())
 			.await
 			.map_err(df_err_to_sql)?;
 
-		schema_to_field_desc(&plan.schema().clone().into())
+		let fields = schema_to_field_desc(&plan.schema().clone().into())?;
+
+		Ok(StatementDescription {
+			fields: Some(fields),
+			parameters: None
+		})
+
 	}
 
 	async fn create_portal(&mut self, statement: &Statement) -> Result<Self::PortalType, ErrorResponse> {
@@ -101,4 +113,15 @@ impl Engine for DataFusionEngine {
 
 		Ok(DataFusionPortal { df })
 	}
+
+	async fn create_and_bind_portal(&mut self, statement: &Statement, _params: Vec<DataTypeOid>, _binding: Vec<Bytes>) -> Result<Self::PortalType, ErrorResponse> {
+		let df = self
+			.ctx
+			.sql(&translate_statement(statement).to_string())
+			.await
+			.map_err(df_err_to_sql)?;
+
+		Ok(DataFusionPortal { df })
+	}
+
 }

@@ -1,6 +1,7 @@
 use async_trait::async_trait;
+use bytes::Bytes;
 use convergence::engine::{Engine, Portal};
-use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
+use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState, StatementDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use sqlparser::ast::{Expr, SelectItem, SetExpr, Statement};
@@ -11,10 +12,18 @@ struct ReturnSingleScalarPortal;
 
 #[async_trait]
 impl Portal for ReturnSingleScalarPortal {
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
+	async fn execute(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse> {
 		let mut row = batch.create_row();
 		row.write_int4(1);
 		Ok(())
+	}
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<Vec<FieldDescription>, ErrorResponse> {
+		self.fetch(batch).await?;
+
+		Ok(vec![FieldDescription {
+			name: "test".to_owned(),
+			data_type: DataTypeOid::Int4,
+		}])
 	}
 }
 
@@ -24,7 +33,7 @@ struct ReturnSingleScalarEngine;
 impl Engine for ReturnSingleScalarEngine {
 	type PortalType = ReturnSingleScalarPortal;
 
-	async fn prepare(&mut self, statement: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse> {
+	async fn prepare(&mut self, statement: &Statement) -> Result<StatementDescription, ErrorResponse> {
 		if let Statement::Query(query) = &statement {
 			if let SetExpr::Select(select) = &*query.body {
 				if select.projection.len() == 1 {
@@ -39,15 +48,26 @@ impl Engine for ReturnSingleScalarEngine {
 			}
 		}
 
-		Ok(vec![FieldDescription {
+		let fields = vec![FieldDescription {
 			name: "test".to_owned(),
 			data_type: DataTypeOid::Int4,
-		}])
+		}];
+
+		Ok(StatementDescription {
+			fields: Some(fields),
+			parameters: None
+		})
+
 	}
 
 	async fn create_portal(&mut self, _: &Statement) -> Result<Self::PortalType, ErrorResponse> {
 		Ok(ReturnSingleScalarPortal)
 	}
+
+	async fn create_and_bind_portal(&mut self, _statement: &Statement, _params: Vec<DataTypeOid>, _binding: Vec<Bytes>) -> Result<Self::PortalType, ErrorResponse> {
+		Ok(ReturnSingleScalarPortal)
+	}
+
 }
 
 async fn setup() -> tokio_postgres::Client {
