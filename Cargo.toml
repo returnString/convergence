@@ -1,5 +1,37 @@
-[workspace]
-members = [
-	"convergence",
-	"convergence-arrow",
-]
+
+
+
+[package]
+name = "convergence"
+version = "0.14.0"
+authors = ["Ruan Pearce-Authers <ruanpa@outlook.com>"]
+edition = "2018"
+description = "Write servers that speak PostgreSQL's wire protocol"
+license = "MIT"
+repository = "https://github.com/returnString/convergence"
+
+[lib]
+path = "convergence/src/lib.rs"
+
+
+[dependencies]
+tokio = { version = "1", features = [ "net", "rt-multi-thread", "macros", "io-util", "io-std" ] }
+tokio-util = { version = "0.7", features = [ "codec" ] }
+thiserror = "1"
+bytes = "1"
+futures = "0.3"
+sqlparser = "0.37"
+async-trait = "0.1"
+chrono = "0.4"
+
+[dev-dependencies]
+tokio-postgres = "0.7"
+
+
+
+# Cannot nest Workspaces
+# [workspace]
+# members = [
+# 	"convergence",
+# 	"convergence-arrow",
+# ]
