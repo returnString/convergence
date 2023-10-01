@@ -111,7 +111,7 @@ impl<E: Engine> Connection<E> {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Startup(startup) => {
 						// do startup stuff
-						// println!("startup {:?}", startup);
+						// tracing::debug!("startup {:?}", startup);
 					}
 					ClientMessage::SSLRequest => {
 						// we don't support SSL for now
@@ -148,11 +148,14 @@ impl<E: Engine> Connection<E> {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
 
-						// println!(" ------------- PARSE ------------- ");
+						tracing::debug!(" ------------- PARSE! ------------- ");
 
 						let parsed_statement = self.parse_statement(&parse.query)?;
 
+						tracing::debug!("prepared_statement {:?}", parsed_statement);
+
 						if let Some(statement) = &parsed_statement {
+							tracing::debug!("=== ENGINE");
 							let statement_description = self.engine.prepare(statement).await?;
 
 							let prepared_statement = PreparedStatement {
@@ -166,11 +169,12 @@ impl<E: Engine> Connection<E> {
 								prepared_statement
 							);
 						}
+						tracing::debug!("sent");
 						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
 
-						// println!(" ------------- BIND ------------- ");
+						tracing::debug!(" ------------- BIND ------------- ");
 
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
@@ -218,9 +222,11 @@ impl<E: Engine> Connection<E> {
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
 
-						// println!(" ------------- DESCRIBE PREPARED_STATEMENT ------------- ");
+						tracing::debug!(" ------------- DESCRIBE PREPARED_STATEMENT ------------- ");
 
 						let prepared_statement = self.prepared_statement(statement_name)?;
+
+						tracing::debug!("prepared_statement {:?}", &prepared_statement);
 
 						let parameters = prepared_statement.parameters.clone();
 						let fields = prepared_statement.fields.clone();
@@ -253,7 +259,7 @@ impl<E: Engine> Connection<E> {
 
 						Some(bound) => {
 
-							// println!(" ------------- EXECUTE ------------- ");
+							tracing::debug!(" ------------- EXECUTE ------------- ");
 
 							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
 
@@ -275,7 +281,7 @@ impl<E: Engine> Connection<E> {
 					},
 					ClientMessage::Query(query) => {
 
-						// println!("------------- QUERY -------------");
+						tracing::debug!("------------- QUERY -------------");
 
 						if let Some(parsed) = self.parse_statement(&query)? {
 							let mut portal = self.engine.create_portal(&parsed).await?;
@@ -306,6 +312,14 @@ impl<E: Engine> Connection<E> {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
+					ClientMessage::Close(Close::Portal(ref portal_name)) => {
+						tracing::debug!(" ------------- CLOSE PORTAL ------------- ");
+						// TODO
+					},
+					ClientMessage::Close(Close::PreparedStatement(ref statement_name)) => {
+						tracing::debug!(" ------------- CLOSE PREPARED_STATEMENT ------------- ");
+						// TODO
+					}
 					_ => return Err(ErrorResponse::error(SqlState::ProtocolViolation, "unexpected message").into()),
 				};
 
@@ -323,6 +337,7 @@ impl<E: Engine> Connection<E> {
 				Ok(Some(state)) => state,
 				Ok(None) => return Ok(()),
 				Err(ConnectionError::ErrorResponse(err_info)) => {
+					tracing::debug!("error response: {:?}", err_info);
 					framed.send(err_info.clone()).await?;
 
 					if err_info.severity == Severity::Fatal {
