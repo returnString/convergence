@@ -135,6 +135,11 @@ pub struct Bind {
 	pub parameters: Vec<Bytes>,
 }
 
+#[derive(Debug)]
+pub enum Close {
+	Portal(String),
+	PreparedStatement(String),
+}
 
 // Byte1('B')
 // Identifies the message as a Bind command.
@@ -192,6 +197,7 @@ pub enum ClientMessage {
 	Execute(Execute),
 	Query(String),
 	Terminate,
+	Close(Close),
 }
 
 pub trait BackendMessage: std::fmt::Debug {
@@ -689,7 +695,21 @@ impl Decoder for ConnectionCodec {
 				ClientMessage::Query(query)
 			}
 			b'X' => ClientMessage::Terminate,
-			other => return Err(ProtocolError::InvalidMessageType(other)),
+			b'C' => {
+				let target_type = src.get_u8();
+				let name = read_cstr(src)?;
+
+				ClientMessage::Close(match target_type {
+					b'P' => Close::Portal(name),
+					b'S' => Close::PreparedStatement(name),
+					_ => return Err(ProtocolError::ParserError),
+				})
+			}
+			other => {
+				println!("unknown message type: {:?}", other);
+				return Err(ProtocolError::InvalidMessageType(other))
+			},
+
 		};
 
 		Ok(Some(message))
