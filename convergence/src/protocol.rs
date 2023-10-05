@@ -328,7 +328,7 @@ impl BackendMessage for ParameterDescription {
 	fn encode(&self, dst: &mut BytesMut) {
 		dst.put_i16(self.parameters.len() as i16);
 		for parameter in &self.parameters {
-			dst.put_u32(parameter.clone().into());
+			dst.put_u32((*parameter).into());
 		}
 	}
 }
