@@ -8,6 +8,7 @@ use sqlparser::ast::Statement;
 use sqlparser::dialect::PostgreSqlDialect;
 use sqlparser::parser::Parser;
 use std::collections::HashMap;
+// use std::fmt;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::Framed;
 
@@ -34,11 +35,13 @@ enum ConnectionState {
 }
 
 #[derive(Debug, Clone)]
-struct PreparedStatement {
+pub struct PreparedStatement {
 	pub statement: Option<Statement>,
 	pub fields: Vec<FieldDescription>,
+	pub parameters: Vec<DataTypeOid>,
 }
 
+#[derive(Debug)]
 struct BoundPortal<E: Engine> {
 	pub portal: E::PortalType,
 	pub row_desc: RowDescription,
@@ -106,8 +109,9 @@ impl<E: Engine> Connection<E> {
 		match self.state {
 			ConnectionState::Startup => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
-					ClientMessage::Startup(_startup) => {
+					ClientMessage::Startup(startup) => {
 						// do startup stuff
+						// tracing::debug!("startup {:?}", startup);
 					}
 					ClientMessage::SSLRequest => {
 						// we don't support SSL for now
@@ -143,21 +147,35 @@ impl<E: Engine> Connection<E> {
 			ConnectionState::Idle => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
+
+						tracing::debug!(" ------------- PARSE! ------------- ");
+
 						let parsed_statement = self.parse_statement(&parse.query)?;
 
-						self.statements.insert(
-							parse.prepared_statement_name,
-							PreparedStatement {
-								fields: match &parsed_statement {
-									Some(statement) => self.engine.prepare(statement).await?,
-									None => vec![],
-								},
+						tracing::debug!("prepared_statement {:?}", parsed_statement);
+
+						if let Some(statement) = &parsed_statement {
+							tracing::debug!("=== ENGINE");
+							let statement_description = self.engine.prepare(statement).await?;
+
+							let prepared_statement = PreparedStatement {
 								statement: parsed_statement,
-							},
-						);
+								parameters: statement_description.parameters.unwrap_or(vec!()),
+								fields: statement_description.fields.unwrap_or(vec!()),
+							};
+
+							self.statements.insert(
+								parse.prepared_statement_name,
+								prepared_statement
+							);
+						}
+						tracing::debug!("sent");
 						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
+
+						tracing::debug!(" ------------- BIND ------------- ");
+
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
@@ -170,9 +188,23 @@ impl<E: Engine> Connection<E> {
 						};
 
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
+
 						let portal = match prepared.statement {
 							Some(statement) => {
-								let portal = self.engine.create_portal(&statement).await?;
+
+								let params = prepared.parameters;
+								let binding = bind.parameters;
+
+								if binding.len() != params.len() {
+									return Err(ErrorResponse::error(
+										SqlState::SyntaxError,
+										format!("wrong number of parameters for prepared statement {}", bind.prepared_statement_name),
+									)
+									.into())
+								}
+
+								let portal = self.engine.create_and_bind_portal(&statement, params, binding).await?;
+
 								let row_desc = RowDescription {
 									fields: prepared.fields.clone(),
 									format_code,
@@ -183,31 +215,56 @@ impl<E: Engine> Connection<E> {
 							None => None,
 						};
 
+
 						self.portals.insert(bind.portal, portal);
 
 						framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						let fields = self.prepared_statement(statement_name)?.fields.clone();
-						framed.send(ParameterDescription {}).await?;
+
+						tracing::debug!(" ------------- DESCRIBE PREPARED_STATEMENT ------------- ");
+
+						let prepared_statement = self.prepared_statement(statement_name)?;
+
+						tracing::debug!("prepared_statement {:?}", &prepared_statement);
+
+						let parameters = prepared_statement.parameters.clone();
+						let fields = prepared_statement.fields.clone();
+
+						framed
+							.send(ParameterDescription {
+								parameters
+							})
+							.await?;
+
 						framed
 							.send(RowDescription {
 								fields,
 								format_code: FormatCode::Text,
 							})
 							.await?;
+
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => framed.send(portal.row_desc.clone()).await?,
+						Some(portal) => {
+							framed.send(portal.row_desc.clone()).await?
+						},
 						None => framed.send(NoData).await?,
+
 					},
 					ClientMessage::Sync => {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
+
 						Some(bound) => {
+
+							tracing::debug!(" ------------- EXECUTE ------------- ");
+
 							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
-							bound.portal.fetch(&mut batch_writer).await?;
+
+							bound.portal.execute(&mut batch_writer).await?;
+
 							let num_rows = batch_writer.num_rows();
 
 							framed.send(batch_writer).await?;
@@ -223,17 +280,23 @@ impl<E: Engine> Connection<E> {
 						}
 					},
 					ClientMessage::Query(query) => {
+
+						tracing::debug!("------------- QUERY -------------");
+
 						if let Some(parsed) = self.parse_statement(&query)? {
-							let fields = self.engine.prepare(&parsed).await?;
+							let mut portal = self.engine.create_portal(&parsed).await?;
+
+							let format_code = FormatCode::Text;
+
+							let mut batch_writer = DataRowBatch::new(format_code);
+
+							let fields = portal.fetch(&mut batch_writer).await?;
+							let num_rows = batch_writer.num_rows();
+
 							let row_desc = RowDescription {
 								fields,
 								format_code: FormatCode::Text,
 							};
-							let mut portal = self.engine.create_portal(&parsed).await?;
-
-							let mut batch_writer = DataRowBatch::from_row_desc(&row_desc);
-							portal.fetch(&mut batch_writer).await?;
-							let num_rows = batch_writer.num_rows();
 
 							framed.send(row_desc).await?;
 							framed.send(batch_writer).await?;
@@ -249,6 +312,14 @@ impl<E: Engine> Connection<E> {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
+					ClientMessage::Close(Close::Portal(ref portal_name)) => {
+						tracing::debug!(" ------------- CLOSE PORTAL ------------- ");
+						// TODO
+					},
+					ClientMessage::Close(Close::PreparedStatement(ref statement_name)) => {
+						tracing::debug!(" ------------- CLOSE PREPARED_STATEMENT ------------- ");
+						// TODO
+					}
 					_ => return Err(ErrorResponse::error(SqlState::ProtocolViolation, "unexpected message").into()),
 				};
 
@@ -266,6 +337,7 @@ impl<E: Engine> Connection<E> {
 				Ok(Some(state)) => state,
 				Ok(None) => return Ok(()),
 				Err(ConnectionError::ErrorResponse(err_info)) => {
+					tracing::debug!("error response: {:?}", err_info);
 					framed.send(err_info.clone()).await?;
 
 					if err_info.severity == Severity::Fatal {

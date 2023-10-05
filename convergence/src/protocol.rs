@@ -4,7 +4,7 @@
 // may want to build this automatically from Postgres docs if possible
 #![allow(missing_docs)]
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut, Bytes};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::mem::size_of;
@@ -132,7 +132,53 @@ pub struct Bind {
 	pub portal: String,
 	pub prepared_statement_name: String,
 	pub result_format: BindFormat,
+	pub parameters: Vec<Bytes>,
 }
+
+#[derive(Debug)]
+pub enum Close {
+	Portal(String),
+	PreparedStatement(String),
+}
+
+// Byte1('B')
+// Identifies the message as a Bind command.
+
+// Int32
+// Length of message contents in bytes, including self.
+
+// String
+// The name of the destination portal (an empty string selects the unnamed portal).
+
+// String
+// The name of the source prepared statement (an empty string selects the unnamed prepared statement).
+
+// Int16
+// The number of parameter format codes that follow (denoted C below). This can be zero to indicate that there are no parameters or that the parameters all use the default format (text); or one, in which case the specified format code is applied to all parameters; or it can equal the actual number of parameters.
+
+// Int16[C]
+// The parameter format codes. Each must presently be zero (text) or one (binary).
+
+// Int16
+// The number of parameter values that follow (possibly zero). This must match the number of parameters needed by the query.
+
+// Next, the following pair of fields appear for each parameter:
+
+// Int32
+// The length of the parameter value, in bytes (this count does not include itself). Can be zero. As a special case, -1 indicates a NULL parameter value. No value bytes follow in the NULL case.
+
+// Byten
+// The value of the parameter, in the format indicated by the associated format code. n is the above length.
+
+	// After the last parameter, the following fields appear:
+
+	// Int16
+	// The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
+
+	// Int16[R]
+	// The result-column format codes. Each must presently be zero (text) or one (binary).
+
+
 
 #[derive(Debug)]
 pub struct Execute {
@@ -151,6 +197,7 @@ pub enum ClientMessage {
 	Execute(Execute),
 	Query(String),
 	Terminate,
+	Close(Close),
 }
 
 pub trait BackendMessage: std::fmt::Debug {
@@ -252,14 +299,39 @@ impl BackendMessage for ErrorResponse {
 	}
 }
 
-#[derive(Debug)]
-pub struct ParameterDescription {}
+// ParameterDescription (B)
+
+//     Byte1('t')
+//         Identifies the message as a parameter description.
+//
+//     Int32
+//         Length of message contents in bytes, including self.
+//     Int16
+//         The number of parameters used by the statement (can be zero).
+//
+//     Then, for each parameter, there is the following:
+//     Int32
+//         Specifies the object ID of the parameter data type.
+
+#[derive(Debug, Clone)]
+pub struct StatementDescription {
+	pub fields: Option<Vec<FieldDescription>>,
+	pub parameters: Option<Vec<DataTypeOid>>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ParameterDescription {
+	pub parameters: Vec<DataTypeOid>
+}
 
 impl BackendMessage for ParameterDescription {
 	const TAG: u8 = b't';
 
 	fn encode(&self, dst: &mut BytesMut) {
-		dst.put_i16(0);
+		dst.put_i16(self.parameters.len() as i16);
+		for parameter in &self.parameters {
+			dst.put_u32(parameter.clone().into());
+		}
 	}
 }
 
@@ -274,6 +346,46 @@ pub struct RowDescription {
 	pub fields: Vec<FieldDescription>,
 	pub format_code: FormatCode,
 }
+
+// From https://www.postgresql.org/docs/current/protocol-message-formats.html
+//
+// RowDescription (B)
+
+//     Byte1('T')
+
+//         Identifies the message as a row description.
+//     Int32
+
+//         Length of message contents in bytes, including self.
+//     Int16
+
+//         Specifies the number of fields in a row (can be zero).
+
+//     Then, for each field, there is the following:
+
+//     String
+
+//         The field name.
+//     Int32
+
+//         If the field can be identified as a column of a specific table, the object ID of the table; otherwise zero.
+//     Int16
+
+//         If the field can be identified as a column of a specific table, the attribute number of the column; otherwise zero.
+//     Int32
+
+//         The object ID of the field's data type.
+//     Int16
+
+//         The data type size (see pg_type.typlen). Note that negative values denote variable-width types.
+//     Int32
+
+//         The type modifier (see pg_attribute.atttypmod). The meaning of the modifier is type-specific.
+//     Int16
+
+//         The format code being used for the field. Currently will be zero (text) or one (binary). In a RowDescription returned from the statement variant of Describe, the format code is not yet known and will always be zero.
+
+
 
 impl BackendMessage for RowDescription {
 	const TAG: u8 = b'T';
@@ -469,6 +581,7 @@ impl Decoder for ConnectionCodec {
 						}
 						None => Some(string_value),
 					}
+
 				}
 			}
 
@@ -537,10 +650,15 @@ impl Decoder for ConnectionCodec {
 					let _format_code = src.get_i16();
 				}
 
+				let mut parameters: Vec<Bytes> = vec![];
 				let num_params = src.get_i16();
 				for _ in 0..num_params {
 					let param_len = src.get_i32() as usize;
 					let _bytes = &src[0..param_len];
+
+					let b = Bytes::copy_from_slice(_bytes);
+					parameters.push(b);
+
 					src.advance(param_len);
 				}
 
@@ -560,6 +678,7 @@ impl Decoder for ConnectionCodec {
 					portal,
 					prepared_statement_name,
 					result_format,
+					parameters,
 				})
 			}
 			b'E' => {
@@ -576,7 +695,21 @@ impl Decoder for ConnectionCodec {
 				ClientMessage::Query(query)
 			}
 			b'X' => ClientMessage::Terminate,
-			other => return Err(ProtocolError::InvalidMessageType(other)),
+			b'C' => {
+				let target_type = src.get_u8();
+				let name = read_cstr(src)?;
+
+				ClientMessage::Close(match target_type {
+					b'P' => Close::Portal(name),
+					b'S' => Close::PreparedStatement(name),
+					_ => return Err(ProtocolError::ParserError),
+				})
+			}
+			other => {
+				println!("unknown message type: {:?}", other);
+				return Err(ProtocolError::InvalidMessageType(other))
+			},
+
 		};
 
 		Ok(Some(message))

@@ -1,18 +1,25 @@
 //! Contains core interface definitions for custom SQL engines.
 
-use crate::protocol::{ErrorResponse, FieldDescription};
+use crate::connection::PreparedStatement;
+use crate::protocol::{ErrorResponse, FieldDescription, StatementDescription, DataTypeOid};
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
+use bytes::Bytes;
 use sqlparser::ast::Statement;
 
 /// A Postgres portal. Portals represent a prepared statement with all parameters specified.
 ///
 /// See Postgres' protocol docs regarding the [extended query overview](https://www.postgresql.org/docs/current/protocol-overview.html#PROTOCOL-QUERY-CONCEPTS)
 /// for more details.
+
 #[async_trait]
 pub trait Portal: Send + Sync {
 	/// Fetches the contents of the portal into a [DataRowBatch].
-	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse>;
+	async fn execute(&mut self, batch: &mut DataRowBatch) -> Result<(), ErrorResponse>;
+
+	/// Fetches the contents of the portal into a [DataRowBatch].
+	/// Used when we do not know the details of the columns until query time.
+	async fn fetch(&mut self, batch: &mut DataRowBatch) -> Result<Vec<FieldDescription>, ErrorResponse>;
 }
 
 /// The engine trait is the core of the `convergence` crate, and is responsible for dispatching most SQL operations.
@@ -24,8 +31,15 @@ pub trait Engine: Send + Sync + 'static {
 	type PortalType: Portal;
 
 	/// Prepares a statement, returning a vector of field descriptions for the final statement result.
-	async fn prepare(&mut self, stmt: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse>;
+	// async fn prepare(&mut self, stmt: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse>;
+	async fn prepare(&mut self, stmt: &Statement) -> Result<StatementDescription, ErrorResponse>;
 
 	/// Creates a new portal for the given statement.
+	// async fn create_portal(&mut self, stmt: &Statement) -> Result<Self::PortalType, ErrorResponse>;
+
+	/// Creates a new portal for the given statement passing params for decoding.
 	async fn create_portal(&mut self, stmt: &Statement) -> Result<Self::PortalType, ErrorResponse>;
+
+	/// Creates a new portal for a prepared statement and passings params for decoding.
+	async fn create_and_bind_portal(&mut self, stmt: &Statement, params: Vec<DataTypeOid>, binding: Vec<Bytes>) -> Result<Self::PortalType, ErrorResponse>;
 }
