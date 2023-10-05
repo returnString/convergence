@@ -35,6 +35,7 @@ enum ConnectionState {
 }
 
 #[derive(Debug, Clone)]
+/// Wraps Parsed Statement and associated metadata
 pub struct PreparedStatement {
 	pub statement: Option<Statement>,
 	pub fields: Vec<FieldDescription>,
@@ -109,7 +110,7 @@ impl<E: Engine> Connection<E> {
 		match self.state {
 			ConnectionState::Startup => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
-					ClientMessage::Startup(startup) => {
+					ClientMessage::Startup(_startup) => {
 						// do startup stuff
 						// tracing::debug!("startup {:?}", startup);
 					}
@@ -297,11 +298,11 @@ impl<E: Engine> Connection<E> {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
-					ClientMessage::Close(Close::Portal(ref portal_name)) => {
+					ClientMessage::Close(Close::Portal(ref _portal_name)) => {
 						tracing::debug!(" ------------- CLOSE PORTAL ------------- ");
 						// TODO
 					}
-					ClientMessage::Close(Close::PreparedStatement(ref statement_name)) => {
+					ClientMessage::Close(Close::PreparedStatement(ref _statement_name)) => {
 						tracing::debug!(" ------------- CLOSE PREPARED_STATEMENT ------------- ");
 						// TODO
 					}
