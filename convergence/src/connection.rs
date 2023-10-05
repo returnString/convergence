@@ -147,7 +147,6 @@ impl<E: Engine> Connection<E> {
 			ConnectionState::Idle => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
-
 						tracing::debug!(" ------------- PARSE! ------------- ");
 
 						let parsed_statement = self.parse_statement(&parse.query)?;
@@ -160,20 +159,17 @@ impl<E: Engine> Connection<E> {
 
 							let prepared_statement = PreparedStatement {
 								statement: parsed_statement,
-								parameters: statement_description.parameters.unwrap_or(vec!()),
-								fields: statement_description.fields.unwrap_or(vec!()),
+								parameters: statement_description.parameters.unwrap_or(vec![]),
+								fields: statement_description.fields.unwrap_or(vec![]),
 							};
 
-							self.statements.insert(
-								parse.prepared_statement_name,
-								prepared_statement
-							);
+							self.statements
+								.insert(parse.prepared_statement_name, prepared_statement);
 						}
 						tracing::debug!("sent");
 						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-
 						tracing::debug!(" ------------- BIND ------------- ");
 
 						let format_code = match bind.result_format {
@@ -191,16 +187,18 @@ impl<E: Engine> Connection<E> {
 
 						let portal = match prepared.statement {
 							Some(statement) => {
-
 								let params = prepared.parameters;
 								let binding = bind.parameters;
 
 								if binding.len() != params.len() {
 									return Err(ErrorResponse::error(
 										SqlState::SyntaxError,
-										format!("wrong number of parameters for prepared statement {}", bind.prepared_statement_name),
+										format!(
+											"wrong number of parameters for prepared statement {}",
+											bind.prepared_statement_name
+										),
 									)
-									.into())
+									.into());
 								}
 
 								let portal = self.engine.create_and_bind_portal(&statement, params, binding).await?;
@@ -215,13 +213,11 @@ impl<E: Engine> Connection<E> {
 							None => None,
 						};
 
-
 						self.portals.insert(bind.portal, portal);
 
 						framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-
 						tracing::debug!(" ------------- DESCRIBE PREPARED_STATEMENT ------------- ");
 
 						let prepared_statement = self.prepared_statement(statement_name)?;
@@ -231,11 +227,7 @@ impl<E: Engine> Connection<E> {
 						let parameters = prepared_statement.parameters.clone();
 						let fields = prepared_statement.fields.clone();
 
-						framed
-							.send(ParameterDescription {
-								parameters
-							})
-							.await?;
+						framed.send(ParameterDescription { parameters }).await?;
 
 						framed
 							.send(RowDescription {
@@ -243,22 +235,16 @@ impl<E: Engine> Connection<E> {
 								format_code: FormatCode::Text,
 							})
 							.await?;
-
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => {
-							framed.send(portal.row_desc.clone()).await?
-						},
+						Some(portal) => framed.send(portal.row_desc.clone()).await?,
 						None => framed.send(NoData).await?,
-
 					},
 					ClientMessage::Sync => {
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
-
 						Some(bound) => {
-
 							tracing::debug!(" ------------- EXECUTE ------------- ");
 
 							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
@@ -280,7 +266,6 @@ impl<E: Engine> Connection<E> {
 						}
 					},
 					ClientMessage::Query(query) => {
-
 						tracing::debug!("------------- QUERY -------------");
 
 						if let Some(parsed) = self.parse_statement(&query)? {
@@ -315,7 +300,7 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Close(Close::Portal(ref portal_name)) => {
 						tracing::debug!(" ------------- CLOSE PORTAL ------------- ");
 						// TODO
-					},
+					}
 					ClientMessage::Close(Close::PreparedStatement(ref statement_name)) => {
 						tracing::debug!(" ------------- CLOSE PREPARED_STATEMENT ------------- ");
 						// TODO

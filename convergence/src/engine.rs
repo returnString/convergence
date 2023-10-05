@@ -1,7 +1,7 @@
 //! Contains core interface definitions for custom SQL engines.
 
 use crate::connection::PreparedStatement;
-use crate::protocol::{ErrorResponse, FieldDescription, StatementDescription, DataTypeOid};
+use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, StatementDescription};
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -41,5 +41,10 @@ pub trait Engine: Send + Sync + 'static {
 	async fn create_portal(&mut self, stmt: &Statement) -> Result<Self::PortalType, ErrorResponse>;
 
 	/// Creates a new portal for a prepared statement and passings params for decoding.
-	async fn create_and_bind_portal(&mut self, stmt: &Statement, params: Vec<DataTypeOid>, binding: Vec<Bytes>) -> Result<Self::PortalType, ErrorResponse>;
+	async fn create_and_bind_portal(
+		&mut self,
+		stmt: &Statement,
+		params: Vec<DataTypeOid>,
+		binding: Vec<Bytes>,
+	) -> Result<Self::PortalType, ErrorResponse>;
 }

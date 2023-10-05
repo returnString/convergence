@@ -4,7 +4,7 @@
 // may want to build this automatically from Postgres docs if possible
 #![allow(missing_docs)]
 
-use bytes::{Buf, BufMut, BytesMut, Bytes};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::mem::size_of;
@@ -170,15 +170,13 @@ pub enum Close {
 // Byten
 // The value of the parameter, in the format indicated by the associated format code. n is the above length.
 
-	// After the last parameter, the following fields appear:
+// After the last parameter, the following fields appear:
 
-	// Int16
-	// The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
+// Int16
+// The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
 
-	// Int16[R]
-	// The result-column format codes. Each must presently be zero (text) or one (binary).
-
-
+// Int16[R]
+// The result-column format codes. Each must presently be zero (text) or one (binary).
 
 #[derive(Debug)]
 pub struct Execute {
@@ -321,7 +319,7 @@ pub struct StatementDescription {
 
 #[derive(Debug, Clone)]
 pub struct ParameterDescription {
-	pub parameters: Vec<DataTypeOid>
+	pub parameters: Vec<DataTypeOid>,
 }
 
 impl BackendMessage for ParameterDescription {
@@ -384,8 +382,6 @@ pub struct RowDescription {
 //     Int16
 
 //         The format code being used for the field. Currently will be zero (text) or one (binary). In a RowDescription returned from the statement variant of Describe, the format code is not yet known and will always be zero.
-
-
 
 impl BackendMessage for RowDescription {
 	const TAG: u8 = b'T';
@@ -581,7 +577,6 @@ impl Decoder for ConnectionCodec {
 						}
 						None => Some(string_value),
 					}
-
 				}
 			}
 
@@ -707,9 +702,8 @@ impl Decoder for ConnectionCodec {
 			}
 			other => {
 				println!("unknown message type: {:?}", other);
-				return Err(ProtocolError::InvalidMessageType(other))
-			},
-
+				return Err(ProtocolError::InvalidMessageType(other));
+			}
 		};
 
 		Ok(Some(message))
