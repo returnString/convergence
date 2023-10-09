@@ -32,7 +32,10 @@ macro_rules! data_types {
 					$(
 						Self::$name => $size,
 					)*
-					Self::Unknown(_) => unimplemented!(),
+					Self::Unknown(oid) => {
+						tracing::warn!("Unknown data type OID {}", oid);
+						unimplemented!();
+					}
 				}
 			}
 		}
@@ -65,20 +68,192 @@ macro_rules! data_types {
 // https://github.com/sfackler/rust-postgres/blob/master/postgres-types/src/type_gen.rs
 data_types! {
 	Unspecified = 0, 0
-
 	Bool = 16, 1
-
-	Int2 = 21, 2
-	Int4 = 23, 4
+	Bytea = 17, -1
+	Char = 18, 1
+	Name = 19, 64
 	Int8 = 20, 8
-
+	Int2 = 21, 2
+	Int2Vector = 22, 2
+	Int4 = 23, 4
+	Regproc = 24, -1
+	Text = 25, -1
+	Oid = 26, -1
+	Tid = 27, -1
+	Xid = 28, -1
+	Cid = 29, -1
+	OidVector = 30, -1
+	PgDdlCommand = 32, -1
+	Json = 114, -1
+	Xml = 142, -1
+	XmlArray = 143, -1
+	PgNodeTree = 194, -1
+	JsonArray = 199, -1
+	TableAmHandler = 269, -1
+	Xid8Array = 271, -1
+	IndexAmHandler = 325, -1
+	Point = 600, -1
+	Lseg = 601, -1
+	Path = 602, -1
+	Box = 603, -1
+	Polygon = 604, -1
+	Line = 628, -1
+	LineArray = 629, -1
+	Cidr = 650, -1
+	CidrArray = 651, -1
 	Float4 = 700, 4
 	Float8 = 701, 8
-
+	// Unknown = 705, -1
+	Circle = 718, -1
+	CircleArray = 719, -1
+	Macaddr8 = 774, -1
+	Macaddr8Array = 775, -1
+	Money = 790, -1
+	MoneyArray = 791, -1
+	Macaddr = 829, -1
+	Inet = 869, -1
+	BoolArray = 1000, -1
+	ByteaArray = 1001, -1
+	CharArray = 1002, -1
+	NameArray = 1003, -1
+	Int2Array = 1005, -1
+	Int2VectorArray = 1006, -1
+	Int4Array = 1007, -1
+	RegprocArray = 1008, -1
+	TextArray = 1009, -1
+	TidArray = 1010, -1
+	XidArray = 1011, -1
+	CidArray = 1012, -1
+	OidVectorArray = 1013, -1
+	BpcharArray = 1014, -1
+	VarcharArray = 1015, -1
+	Int8Array = 1016, -1
+	PointArray = 1017, -1
+	LsegArray = 1018, -1
+	PathArray = 1019, -1
+	BoxArray = 1020, -1
+	Float4Array = 1021, -1
+	Float8Array = 1022, -1
+	PolygonArray = 1027, -1
+	OidArray = 1028, -1
+	Aclitem = 1033, -1
+	AclitemArray = 1034, -1
+	MacaddrArray = 1040, -1
+	InetArray = 1041, -1
+	Bpchar = 1042, -1
+	Varchar = 1043, -1
 	Date = 1082, 4
+	Time = 1083, 8
 	Timestamp = 1114, 8
+	TimestampArray = 1115, -1
+	DateArray = 1182, -1
+	TimeArray = 1183, -1
+	Timestamptz = 1184, 8
+	TimestamptzArray = 1185, -1
+	Interval = 1186, 16
+	IntervalArray = 1187, -1
+	NumericArray = 1231, -1
+	CstringArray = 1263, -1
+	Timetz = 1266, 12
+	TimetzArray = 1270, -1
+	Bit = 1560, 1
+	BitArray = 1561, -1
+	Varbit = 1562, -1
+	VarbitArray = 1563, -1
+	Numeric = 1700, -1
+	Refcursor = 1790, -1
+	RefcursorArray = 2201, -1
+	Regprocedure = 2202, -1
+	Regoper = 2203, -1
+	Regoperator = 2204, -1
+	Regclass = 2205, -1
+	Regtype = 2206, -1
+	RegprocedureArray = 2207, -1
+	RegoperArray = 2208, -1
+	RegoperatorArray = 2209, -1
+	RegclassArray = 2210, -1
+	RegtypeArray = 2211, -1
+	Record = 2249, -1
+	Cstring = 2275, -1
+	Any = 2276, -1
+	Anyarray = 2277, -1
+	Void = 2278, -1
+	Trigger = 2279, -1
+	LanguageHandler = 2280, -1
+	Internal = 2281, -1
+	Anyelement = 2283, -1
+	RecordArray = 2287, -1
+	Anynonarray = 2776, -1
+	TxidSnapshotArray = 2949, -1
+	Uuid = 2950, 16
+	UuidArray = 2951, -1
+	TxidSnapshot = 2970, -1
+	FdwHandler = 3115, -1
+	PgLsn = 3220, -1
+	PgLsnArray = 3221, -1
+	TsmHandler = 3310, -1
+	PgNdistinct = 3361, -1
+	PgDependencies = 3402, -1
+	Anyenum = 3500, -1
+	TsVector = 3614, -1
+	Tsquery = 3615, -1
+	GtsVector = 3642, -1
+	TsVectorArray = 3643, -1
+	GtsVectorArray = 3644, -1
+	TsqueryArray = 3645, -1
+	Regconfig = 3734, -1
+	RegconfigArray = 3735, -1
+	Regdictionary = 3769, -1
+	RegdictionaryArray = 3770, -1
+	Jsonb = 3802, -1
+	JsonbArray = 3807, -1
+	AnyRange = 3831, -1
+	EventTrigger = 3838, -1
+	Int4Range = 3904, -1
+	Int4RangeArray = 3905, -1
+	NumRange = 3906, -1
+	NumRangeArray = 3907, -1
+	TsRange = 3908, -1
+	TsRangeArray = 3909, -1
+	TstzRange = 3910, -1
+	TstzRangeArray = 3911, -1
+	DateRange = 3912, -1
+	DateRangeArray = 3913, -1
+	Int8Range = 3926, -1
+	Int8RangeArray = 3927, -1
+	Jsonpath = 4072, -1
+	JsonpathArray = 4073, -1
+	Regnamespace = 4089, -1
+	RegnamespaceArray = 4090, -1
+	Regrole = 4096, -1
+	RegroleArray = 4097, -1
+	Regcollation = 4191, -1
+	RegcollationArray = 4192, -1
+	Int4multiRange = 4451, -1
+	NummultiRange = 4532, -1
+	TsmultiRange = 4533, -1
+	TstzmultiRange = 4534, -1
+	DatemultiRange = 4535, -1
+	Int8multiRange = 4536, -1
+	AnymultiRange = 4537, -1
+	AnycompatiblemultiRange = 4538, -1
+	PgBrinBloomSummary = 4600, -1
+	PgBrinMinmaxMultiSummary = 4601, -1
+	PgMcvList = 5017, -1
+	PgSnapshot = 5038, -1
+	PgSnapshotArray = 5039, -1
+	Xid8 = 5069, -1
+	Anycompatible = 5077, -1
+	Anycompatiblearray = 5078, -1
+	Anycompatiblenonarray = 5079, -1
+	AnycompatibleRange = 5080, -1
+	Int4multiRangeArray = 6150, -1
+	NummultiRangeArray = 6151, -1
+	TsmultiRangeArray = 6152, -1
+	TstzmultiRangeArray = 6153, -1
+	DatemultiRangeArray = 6155, -1
+	Int8multiRangeArray = 6157, -1
 
-	Text = 25, -1
 }
 
 /// Describes how to format a given value or set of values.
@@ -297,6 +472,14 @@ impl BackendMessage for ErrorResponse {
 	}
 }
 
+#[derive(Debug, Clone)]
+pub struct StatementDescription {
+	pub fields: Option<Vec<FieldDescription>>,
+	pub parameters: Option<Vec<DataTypeOid>>,
+}
+
+// From https://www.postgresql.org/docs/current/protocol-message-formats.html
+
 // ParameterDescription (B)
 
 //     Byte1('t')
@@ -310,12 +493,6 @@ impl BackendMessage for ErrorResponse {
 //     Then, for each parameter, there is the following:
 //     Int32
 //         Specifies the object ID of the parameter data type.
-
-#[derive(Debug, Clone)]
-pub struct StatementDescription {
-	pub fields: Option<Vec<FieldDescription>>,
-	pub parameters: Option<Vec<DataTypeOid>>,
-}
 
 #[derive(Debug, Clone)]
 pub struct ParameterDescription {
@@ -337,12 +514,6 @@ impl BackendMessage for ParameterDescription {
 pub struct FieldDescription {
 	pub name: String,
 	pub data_type: DataTypeOid,
-}
-
-#[derive(Debug, Clone)]
-pub struct RowDescription {
-	pub fields: Vec<FieldDescription>,
-	pub format_code: FormatCode,
 }
 
 // From https://www.postgresql.org/docs/current/protocol-message-formats.html
@@ -382,6 +553,12 @@ pub struct RowDescription {
 //     Int16
 
 //         The format code being used for the field. Currently will be zero (text) or one (binary). In a RowDescription returned from the statement variant of Describe, the format code is not yet known and will always be zero.
+
+#[derive(Debug, Clone)]
+pub struct RowDescription {
+	pub fields: Vec<FieldDescription>,
+	pub format_code: FormatCode,
+}
 
 impl BackendMessage for RowDescription {
 	const TAG: u8 = b'T';
