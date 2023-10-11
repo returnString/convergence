@@ -13,7 +13,6 @@ repository = "https://github.com/returnString/convergence"
 [lib]
 path = "convergence/src/lib.rs"
 
-
 [dependencies]
 tokio = { version = "1", features = [ "net", "rt-multi-thread", "macros", "io-util", "io-std" ] }
 tokio-util = { version = "0.7", features = [ "codec" ] }
@@ -24,10 +23,6 @@ sqlparser = "0.37"
 async-trait = "0.1"
 chrono = "0.4"
 tracing = "0.1.37"
-
-[dev-dependencies]
-tokio-postgres = "0.7"
-
 
 # Cannot nest Workspaces
 # [workspace]
