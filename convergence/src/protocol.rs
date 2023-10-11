@@ -64,6 +64,7 @@ macro_rules! data_types {
 	};
 }
 
+
 // For oid see:
 // https://github.com/sfackler/rust-postgres/blob/master/postgres-types/src/type_gen.rs
 data_types! {
@@ -254,6 +255,8 @@ data_types! {
 	DatemultiRangeArray = 6155, -1
 	Int8multiRangeArray = 6157, -1
 
+	// Not in the postgres-types package
+	LTree = 16923, -1
 }
 
 /// Describes how to format a given value or set of values.
