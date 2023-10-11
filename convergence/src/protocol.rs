@@ -254,6 +254,8 @@ data_types! {
 	DatemultiRangeArray = 6155, -1
 	Int8multiRangeArray = 6157, -1
 
+	// Not in the postgres-types package
+	LTree = 16923, -1
 }
 
 /// Describes how to format a given value or set of values.
