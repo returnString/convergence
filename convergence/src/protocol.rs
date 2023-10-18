@@ -34,7 +34,7 @@ macro_rules! data_types {
 					)*
 					Self::Unknown(oid) => {
 						tracing::warn!("Unknown data type OID {}", oid);
-						unimplemented!();
+						-1 //Assume variable length
 					}
 				}
 			}
@@ -254,8 +254,6 @@ data_types! {
 	DatemultiRangeArray = 6155, -1
 	Int8multiRangeArray = 6157, -1
 
-	// Not in the postgres-types package
-	LTree = 16923, -1
 }
 
 /// Describes how to format a given value or set of values.

@@ -2,7 +2,7 @@
 
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, Bytes, BytesMut};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use tokio_util::codec::Encoder;
 
 /// Supports batched rows for e.g. returning portal result sets.
@@ -62,6 +62,12 @@ impl DataRowBatch {
 	/// Returns the number of rows currently written to this batch.
 	pub fn num_rows(&self) -> usize {
 		self.num_rows
+	}
+
+	/// Returns a clone of the raw row bytes
+	/// Only used for testing
+	pub fn data(&self) -> Bytes {
+		Bytes::from(self.data.clone())
 	}
 }
 
@@ -146,6 +152,18 @@ impl<'a> DataRowWriter<'a> {
 		}
 	}
 
+	/// Writes a time value for the next column.
+	pub fn write_time(&mut self, val: NaiveTime) {
+		match self.parent.format_code {
+			FormatCode::Binary => {
+				let delta = val.signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+				let time = delta.num_microseconds().unwrap_or(0);
+				self.write_int8(time);
+			}
+			FormatCode::Text => self.write_string(&val.to_string()),
+		}
+	}
+
 	/// Writes a timestamp value for the next column.
 	pub fn write_timestamp(&mut self, val: NaiveDateTime) {
 		match self.parent.format_code {
@@ -159,7 +177,7 @@ impl<'a> DataRowWriter<'a> {
 			FormatCode::Text => self.write_string(&val.to_string()),
 		}
 	}
-
+	primitive_write!(write_char, i8);
 	primitive_write!(write_int2, i16);
 	primitive_write!(write_int4, i32);
 	primitive_write!(write_int8, i64);
