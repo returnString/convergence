@@ -206,3 +206,87 @@ impl Encoder<DataRowBatch> for ConnectionCodec {
 		Ok(())
 	}
 }
+
+#[cfg(test)]
+mod tests {
+	use std::{convert::TryInto, mem};
+
+	use crate::protocol::FormatCode;
+
+	use super::DataRowBatch;
+
+	// DataRow (B)
+	// https://www.postgresql.org/docs/current/protocol-message-formats.html
+	// Byte1('D')
+	//     Identifies the message as a data row.
+	// Int32
+	//     Length of message contents in bytes, including self.
+	// Int16
+	//     The number of column values that follow (possibly zero).
+	//
+	// Next, the following pair of fields appear for each column:
+	//
+	// Int32
+	//     The length of the column value, in bytes (this count does not include itself). Can be zero. As a special case, -1 indicates a NULL column value. No value bytes follow in the NULL case.
+	// Byte * N
+	//     The value of the column, in the format indicated by the associated format code. n is the above length.
+
+	macro_rules! test_primitive_write {
+		($name: ident, $type: ident) => {
+			#[test]
+			pub fn $name() {
+				const EXPECTED_LEN: i32 = mem::size_of::<$type>() as i32;
+
+				let mut batch = DataRowBatch::new(FormatCode::Binary);
+				batch.set_num_cols(1);
+
+				let mut row = batch.create_row();
+
+				let expected_val = 42 as $type;
+				let expected_columns = 1;
+				let expected_id = b'D';
+
+				row.$name(expected_val);
+				drop(row); // Drop the row to write to the batch
+
+				let message_id = 0..1;
+				let message_len = 1..5;
+				let column_count = 5..7;
+				let len = 7..11;
+				let val = 11..;
+
+				// row.len + cols + val.len + val
+				// i32 	   + i16  + i32     + val
+				let expected_message_len = 4 + 2 + 4 + EXPECTED_LEN as i32;
+
+				let bytes = batch.data();
+				let bytes = bytes.as_ref();
+
+				let data = &bytes[message_id];
+				assert_eq!(data[0], expected_id);
+
+				let data: [u8; 2] = bytes[column_count].try_into().expect("Expected i16");
+				let data = i16::from_be_bytes(data);
+				assert_eq!(data, expected_columns);
+
+				let data: [u8; 4] = bytes[message_len].try_into().expect("Expected i16");
+				let data = i32::from_be_bytes(data);
+				assert_eq!(data, expected_message_len);
+
+				let data: [u8; 4] = bytes[len].try_into().expect("Expected i32");
+				let data = i32::from_be_bytes(data);
+				assert_eq!(data, EXPECTED_LEN);
+
+				let data: [u8; EXPECTED_LEN as usize] = bytes[val].try_into().expect("Expected $type");
+				let data = $type::from_be_bytes(data);
+				assert_eq!(data, expected_val);
+			}
+		};
+	}
+
+	test_primitive_write!(write_int2, i16);
+	test_primitive_write!(write_int4, i32);
+	test_primitive_write!(write_int8, i64);
+	test_primitive_write!(write_float4, f32);
+	test_primitive_write!(write_float8, f64);
+}
