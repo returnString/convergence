@@ -156,7 +156,8 @@ impl<E: Engine> Connection<E> {
 
 						if let Some(statement) = &parsed_statement {
 							tracing::debug!("=== ENGINE");
-							let statement_description = self.engine.prepare(statement).await?;
+							let statement_description =
+								self.engine.prepare(&parse.prepared_statement_name, statement).await?;
 
 							let prepared_statement = PreparedStatement {
 								statement: parsed_statement,
@@ -202,7 +203,10 @@ impl<E: Engine> Connection<E> {
 									.into());
 								}
 
-								let portal = self.engine.create_and_bind_portal(&statement, params, binding).await?;
+								let portal = self
+									.engine
+									.create_portal(&bind.prepared_statement_name, &statement, params, binding)
+									.await?;
 
 								let row_desc = RowDescription {
 									fields: prepared.fields.clone(),
@@ -270,19 +274,13 @@ impl<E: Engine> Connection<E> {
 						tracing::debug!("------------- QUERY -------------");
 
 						if let Some(parsed) = self.parse_statement(&query)? {
-							let mut portal = self.engine.create_portal(&parsed).await?;
-
 							let format_code = FormatCode::Text;
-
 							let mut batch_writer = DataRowBatch::new(format_code);
 
-							let fields = portal.fetch(&mut batch_writer).await?;
+							let fields = self.engine.query(&parsed, &mut batch_writer).await?;
 							let num_rows = batch_writer.num_rows();
 
-							let row_desc = RowDescription {
-								fields,
-								format_code: FormatCode::Text,
-							};
+							let row_desc = RowDescription { fields, format_code };
 
 							framed.send(row_desc).await?;
 							framed.send(batch_writer).await?;
