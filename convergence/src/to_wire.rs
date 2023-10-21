@@ -1,11 +1,11 @@
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 
-const NULL: i32 = -1;
-
-struct Null {}
-
 pub trait Writer {
 	fn write<T>(&mut self, val: T)
+	where
+		T: ToWire;
+
+	fn write_nullable<T>(&mut self, val: Option<T>)
 	where
 		T: ToWire;
 }
@@ -16,27 +16,21 @@ pub trait ToWire {
 	fn to_text(&self) -> Vec<u8>;
 }
 
-impl<T: ToWire> ToWire for Option<T> {
-	fn to_binary(&self) -> Vec<u8> {
-		match self {
-			Some(ref val) => val.to_binary(),
-			None => NULL.to_binary(),
-		}
-	}
-	fn to_text(&self) -> Vec<u8> {
-		match self {
-			Some(ref val) => val.to_text(),
-			None => NULL.to_binary(),
-		}
-	}
-}
-
 impl ToWire for bool {
 	fn to_binary(&self) -> Vec<u8> {
 		(*self as u8).to_be_bytes().into()
 	}
 	fn to_text(&self) -> Vec<u8> {
 		if *self { "t" } else { "f" }.as_bytes().into()
+	}
+}
+
+impl ToWire for &str {
+	fn to_binary(&self) -> Vec<u8> {
+		self.as_bytes().into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.as_bytes().into()
 	}
 }
 
@@ -108,6 +102,7 @@ to_wire!(f64);
 #[cfg(test)]
 mod tests {
 	use bytes::{BufMut, BytesMut};
+	use chrono::NaiveDateTime;
 	use rand::Rng;
 	use std::{convert::TryInto, mem};
 
@@ -124,6 +119,27 @@ mod tests {
 		{
 			self.buf.put_slice(&val.to_binary());
 		}
+
+		fn write_nullable<T>(&mut self, val: Option<T>)
+		where
+			T: ToWire,
+		{
+			match val {
+				Some(val) => self.buf.put_slice(&val.to_binary()),
+				None => self.buf.put_i32(-1),
+			}
+		}
+	}
+
+	#[test]
+	pub fn test_timestamp() {
+		let expected = "2023-10-21 04:34:48";
+		let date = NaiveDateTime::from_timestamp_opt(1697862888, 0).unwrap();
+		let out = date.to_text();
+
+		let out = String::from_utf8(out).unwrap();
+
+		assert_eq!(expected, out);
 	}
 
 	macro_rules! test_to_wire {
@@ -146,13 +162,13 @@ mod tests {
 				let data: [u8; LEN] = w.buf[..LEN].try_into().expect("Expected $type");
 				let out = $type::from_be_bytes(data);
 
-                assert_eq!(expected, out);
+				assert_eq!(expected, out);
 
-                // Option<T>
-                let val: Option<$type> = Some(expected);
+				// Option<T>
+				let val: Option<$type> = Some(expected);
 
 				let mut w = TestWriter { buf: BytesMut::new() };
-				w.write(val);
+				w.write_nullable(val);
 
 				let data: [u8; LEN] = w.buf[..LEN].try_into().expect("Expected $type");
 				let out = $type::from_be_bytes(data);
@@ -164,18 +180,18 @@ mod tests {
 
 	macro_rules! test_to_wire_null {
 		($name: ident, $type: ident) => {
-			#[tokio::test]
-			pub async fn $name() {
-                // Option<T>
-                let val: Option<$type> = None;
+			#[test]
+			pub fn $name() {
+				// Option<T>
+				let val: Option<$type> = None;
 
 				let mut w = TestWriter { buf: BytesMut::new() };
-				w.write(val);
+				w.write_nullable(val);
 
 				let data: [u8; 4] = w.buf[..4].try_into().expect("Expected $type");
 				let out = i32::from_be_bytes(data);
 
-                let expected: i32 = -1;
+				let expected: i32 = -1;
 				assert_eq!(expected, out);
 			}
 		};
