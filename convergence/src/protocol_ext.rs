@@ -1,6 +1,6 @@
 //! Contains extensions that make working with the Postgres protocol simpler or more efficient.
 
-use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
+use crate::{protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription}, to_wire::{Writer, ToWire}};
 use bytes::{BufMut, Bytes, BytesMut};
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use tokio_util::codec::Encoder;
@@ -87,6 +87,17 @@ macro_rules! primitive_write {
 pub struct DataRowWriter<'a> {
 	current_col: usize,
 	parent: &'a mut DataRowBatch,
+}
+
+impl Writer for DataRowWriter<'_> {
+	fn write<T>(&mut self, val: T)
+	where
+		T: ToWire {
+		match self.parent.format_code {
+			FormatCode::Text => self.write_value(&val.to_binary()),
+			FormatCode::Binary => self.write_value(&val.to_text()),
+		};
+	}
 }
 
 impl<'a> DataRowWriter<'a> {
