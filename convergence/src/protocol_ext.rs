@@ -1,8 +1,10 @@
 //! Contains extensions that make working with the Postgres protocol simpler or more efficient.
 
-use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
+use crate::{
+	protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription},
+	to_wire::{ToWire, Writer},
+};
 use bytes::{BufMut, Bytes, BytesMut};
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
 use tokio_util::codec::Encoder;
 
 /// Supports batched rows for e.g. returning portal result sets.
@@ -71,22 +73,32 @@ impl DataRowBatch {
 	}
 }
 
-macro_rules! primitive_write {
-	($name: ident, $type: ident) => {
-		#[allow(missing_docs)]
-		pub fn $name(&mut self, val: $type) {
-			match self.parent.format_code {
-				FormatCode::Text => self.write_value(&val.to_string().into_bytes()),
-				FormatCode::Binary => self.write_value(&val.to_be_bytes()),
-			};
-		}
-	};
-}
-
 /// Temporarily leased from a [DataRowBatch] to encode a single row.
 pub struct DataRowWriter<'a> {
 	current_col: usize,
 	parent: &'a mut DataRowBatch,
+}
+
+impl Writer for DataRowWriter<'_> {
+	fn write<T>(&mut self, val: T)
+	where
+		T: ToWire,
+	{
+		match self.parent.format_code {
+			FormatCode::Binary => self.write_value(&val.to_binary()),
+			FormatCode::Text => self.write_value(&val.to_text()),
+		};
+	}
+
+	fn write_nullable<T>(&mut self, val: Option<T>)
+	where
+		T: ToWire,
+	{
+		match val {
+			Some(val) => self.write(val),
+			None => self.write_null(),
+		};
+	}
 }
 
 impl<'a> DataRowWriter<'a> {
@@ -100,6 +112,7 @@ impl<'a> DataRowWriter<'a> {
 			self.current_col < self.parent.num_cols,
 			"tried to write more columns than specified in row description"
 		);
+
 		self.current_col += 1;
 		self.parent.row.put_i32(data.len() as i32);
 		self.parent.row.put_slice(data);
@@ -110,79 +123,6 @@ impl<'a> DataRowWriter<'a> {
 		self.current_col += 1;
 		self.parent.row.put_i32(-1);
 	}
-
-	/// Writes raw bytes for the next column.
-	pub fn write_bytes(&mut self, data: Bytes) {
-		self.current_col += 1;
-		self.parent.row.put_i32(data.len() as i32);
-		self.parent.row.put_slice(data.as_ref());
-	}
-
-	/// Writes a string value for the next column.
-	pub fn write_string(&mut self, val: &str) {
-		self.write_value(val.as_bytes());
-	}
-
-	/// Writes a bool value for the next column.
-	pub fn write_bool(&mut self, val: bool) {
-		match self.parent.format_code {
-			FormatCode::Text => self.write_value(if val { "t" } else { "f" }.as_bytes()),
-			FormatCode::Binary => {
-				self.current_col += 1;
-				self.parent.row.put_u8(val as u8);
-			}
-		};
-	}
-
-	fn pg_date_epoch() -> NaiveDate {
-		NaiveDate::from_ymd_opt(2000, 1, 1).expect("failed to create pg date epoch")
-	}
-
-	fn pg_timestamp_epoch() -> NaiveDateTime {
-		Self::pg_date_epoch()
-			.and_hms_opt(0, 0, 0)
-			.expect("failed to create pg timestamp epoch")
-	}
-
-	/// Writes a date value for the next column.
-	pub fn write_date(&mut self, val: NaiveDate) {
-		match self.parent.format_code {
-			FormatCode::Binary => self.write_int4(val.signed_duration_since(Self::pg_date_epoch()).num_days() as i32),
-			FormatCode::Text => self.write_string(&val.to_string()),
-		}
-	}
-
-	/// Writes a time value for the next column.
-	pub fn write_time(&mut self, val: NaiveTime) {
-		match self.parent.format_code {
-			FormatCode::Binary => {
-				let delta = val.signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
-				let time = delta.num_microseconds().unwrap_or(0);
-				self.write_int8(time);
-			}
-			FormatCode::Text => self.write_string(&val.to_string()),
-		}
-	}
-
-	/// Writes a timestamp value for the next column.
-	pub fn write_timestamp(&mut self, val: NaiveDateTime) {
-		match self.parent.format_code {
-			FormatCode::Binary => {
-				self.write_int8(
-					val.signed_duration_since(Self::pg_timestamp_epoch())
-						.num_microseconds()
-						.unwrap(),
-				);
-			}
-			FormatCode::Text => self.write_string(&val.to_string()),
-		}
-	}
-	primitive_write!(write_char, i8);
-	primitive_write!(write_int2, i16);
-	primitive_write!(write_int4, i32);
-	primitive_write!(write_int8, i64);
-	primitive_write!(write_float4, f32);
-	primitive_write!(write_float8, f64);
 }
 
 impl<'a> Drop for DataRowWriter<'a> {
@@ -213,7 +153,7 @@ mod tests {
 
 	use crate::protocol::FormatCode;
 
-	use super::DataRowBatch;
+	use super::{DataRowBatch, Writer};
 
 	// DataRow (B)
 	// https://www.postgresql.org/docs/current/protocol-message-formats.html
@@ -246,7 +186,7 @@ mod tests {
 				let expected_columns = 1;
 				let expected_id = b'D';
 
-				row.$name(expected_val);
+				row.write(expected_val);
 				drop(row); // Drop the row to write to the batch
 
 				let message_id = 0..1;
@@ -279,14 +219,15 @@ mod tests {
 
 				let data: [u8; EXPECTED_LEN as usize] = bytes[val].try_into().expect("Expected $type");
 				let data = $type::from_be_bytes(data);
+
 				assert_eq!(data, expected_val);
 			}
 		};
 	}
 
-	test_primitive_write!(write_int2, i16);
-	test_primitive_write!(write_int4, i32);
-	test_primitive_write!(write_int8, i64);
-	test_primitive_write!(write_float4, f32);
-	test_primitive_write!(write_float8, f64);
+	test_primitive_write!(test_write_int2, i16);
+	test_primitive_write!(test_write_int4, i32);
+	test_primitive_write!(test_write_int8, i64);
+	test_primitive_write!(test_write_float4, f32);
+	test_primitive_write!(test_write_float8, f64);
 }

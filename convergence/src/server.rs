@@ -85,7 +85,12 @@ pub async fn run_with_tcp<E: Engine>(bind: BindOptions, engine_func: EngineFunc<
 		let engine_func = engine_func.clone();
 		tokio::spawn(async move {
 			let mut conn = Connection::new(engine_func().await);
-			conn.run(stream).await.unwrap();
+			let result = conn.run(stream).await;
+
+			if let Err(ConnectionError::ConnectionClosed) = result {
+				//Broken Pipe - client disconnected
+				tracing::warn!("Connection closed by client");
+			}
 		});
 	}
 }
