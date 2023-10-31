@@ -1,5 +1,5 @@
 //! Contains core interface definitions for custom SQL engines.
-use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, StatementDescription};
+use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, StatementDescription, FormatCode};
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -34,6 +34,7 @@ pub trait Engine: Send + Sync + 'static {
 		stmt: &Statement,
 		params: Vec<DataTypeOid>,
 		binding: Vec<Bytes>,
+		format: FormatCode,
 	) -> Result<Self::PortalType, ErrorResponse>;
 
 	/// Queries directly without setting up a portal
