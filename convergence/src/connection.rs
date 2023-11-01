@@ -148,14 +148,14 @@ impl<E: Engine> Connection<E> {
 			ConnectionState::Idle => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
-						tracing::debug!(" ------------- PARSE! ------------- ");
+						tracing::debug!("Connection.Parse");
 
 						let parsed_statement = self.parse_statement(&parse.query)?;
 
 						tracing::debug!("prepared_statement {:?}", parsed_statement);
 
 						if let Some(statement) = &parsed_statement {
-							tracing::debug!("=== ENGINE");
+							tracing::debug!("Preparing Statement Engine");
 							let statement_description =
 								self.engine.prepare(&parse.prepared_statement_name, statement).await?;
 
@@ -172,7 +172,7 @@ impl<E: Engine> Connection<E> {
 						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-						tracing::debug!(" ------------- BIND ------------- ");
+						tracing::debug!("Connection.Bind");
 
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
@@ -185,12 +185,15 @@ impl<E: Engine> Connection<E> {
 							}
 						};
 
+						tracing::debug!("format_code {:?}", format_code);
+
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
 
 						let portal = match prepared.statement {
 							Some(statement) => {
 								let params = prepared.parameters;
 								let binding = bind.parameters;
+								// let format = bind.result_format;
 
 								if binding.len() != params.len() {
 									return Err(ErrorResponse::error(
@@ -205,25 +208,27 @@ impl<E: Engine> Connection<E> {
 
 								let portal = self
 									.engine
-									.create_portal(&bind.prepared_statement_name, &statement, params, binding)
+									.create_portal(&bind.prepared_statement_name, &statement, params, binding, format_code)
 									.await?;
 
 								let row_desc = RowDescription {
 									fields: prepared.fields.clone(),
 									format_code,
 								};
-
 								Some(BoundPortal { portal, row_desc })
 							}
 							None => None,
 						};
 
-						self.portals.insert(bind.portal, portal);
+						if portal.is_some() {
+							tracing::debug!("INSERT PORTAL");
+							self.portals.insert(bind.portal, portal);
+						}
 
 						framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						tracing::debug!(" ------------- DESCRIBE PREPARED_STATEMENT ------------- ");
+						tracing::debug!("Connection.DescribePreparedStatement");
 
 						let prepared_statement = self.prepared_statement(statement_name)?;
 
@@ -250,7 +255,7 @@ impl<E: Engine> Connection<E> {
 					}
 					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
 						Some(bound) => {
-							tracing::debug!(" ------------- EXECUTE ------------- ");
+							tracing::debug!("Connection.Execute");
 
 							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
 
@@ -271,7 +276,7 @@ impl<E: Engine> Connection<E> {
 						}
 					},
 					ClientMessage::Query(query) => {
-						tracing::debug!("------------- QUERY -------------");
+						tracing::debug!("Connection.Query");
 
 						if let Some(parsed) = self.parse_statement(&query)? {
 							let format_code = FormatCode::Text;
@@ -297,11 +302,11 @@ impl<E: Engine> Connection<E> {
 					}
 					ClientMessage::Terminate => return Ok(None),
 					ClientMessage::Close(Close::Portal(ref _portal_name)) => {
-						tracing::debug!(" ------------- CLOSE PORTAL ------------- ");
+						tracing::debug!("Connection.ClosePortal");
 						// TODO
 					}
 					ClientMessage::Close(Close::PreparedStatement(ref _statement_name)) => {
-						tracing::debug!(" ------------- CLOSE PREPARED_STATEMENT ------------- ");
+						tracing::debug!("Connection.ClosePreparedStatement");
 						// TODO
 					}
 					_ => return Err(ErrorResponse::error(SqlState::ProtocolViolation, "unexpected message").into()),
