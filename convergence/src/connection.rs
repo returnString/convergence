@@ -208,7 +208,13 @@ impl<E: Engine> Connection<E> {
 
 								let portal = self
 									.engine
-									.create_portal(&bind.prepared_statement_name, &statement, params, binding, format_code)
+									.create_portal(
+										&bind.prepared_statement_name,
+										&statement,
+										params,
+										binding,
+										format_code,
+									)
 									.await?;
 
 								let row_desc = RowDescription {

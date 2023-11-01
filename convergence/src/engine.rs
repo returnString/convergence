@@ -1,5 +1,5 @@
 //! Contains core interface definitions for custom SQL engines.
-use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, StatementDescription, FormatCode};
+use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, FormatCode, StatementDescription};
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use bytes::Bytes;
