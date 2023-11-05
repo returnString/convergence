@@ -285,12 +285,10 @@ impl<E: Engine> Connection<E> {
 							Some(bound) => {
 								let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
 
-								tracing::debug!("Portal.Execute");
+								tracing::debug!("Connection.Portal.Execute");
 								bound.portal.execute(&mut batch_writer).await?;
 
 								let num_rows = batch_writer.num_rows();
-
-								tracing::debug!("Send");
 
 								framed.send(batch_writer).await?;
 
@@ -301,6 +299,7 @@ impl<E: Engine> Connection<E> {
 									.await?;
 							}
 							None => {
+								tracing::debug!("Connection.Portal.None");
 								framed.send(EmptyQueryResponse).await?;
 							}
 						}

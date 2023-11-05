@@ -316,43 +316,6 @@ pub enum Close {
 	PreparedStatement(String),
 }
 
-// Byte1('B')
-// Identifies the message as a Bind command.
-
-// Int32
-// Length of message contents in bytes, including self.
-
-// String
-// The name of the destination portal (an empty string selects the unnamed portal).
-
-// String
-// The name of the source prepared statement (an empty string selects the unnamed prepared statement).
-
-// Int16
-// The number of parameter format codes that follow (denoted C below). This can be zero to indicate that there are no parameters or that the parameters all use the default format (text); or one, in which case the specified format code is applied to all parameters; or it can equal the actual number of parameters.
-
-// Int16[C]
-// The parameter format codes. Each must presently be zero (text) or one (binary).
-
-// Int16
-// The number of parameter values that follow (possibly zero). This must match the number of parameters needed by the query.
-
-// Next, the following pair of fields appear for each parameter:
-
-// Int32
-// The length of the parameter value, in bytes (this count does not include itself). Can be zero. As a special case, -1 indicates a NULL parameter value. No value bytes follow in the NULL case.
-
-// Byten
-// The value of the parameter, in the format indicated by the associated format code. n is the above length.
-
-// After the last parameter, the following fields appear:
-
-// Int16
-// The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
-
-// Int16[R]
-// The result-column format codes. Each must presently be zero (text) or one (binary).
-
 #[derive(Debug)]
 pub struct Execute {
 	pub portal: String,
@@ -766,6 +729,8 @@ impl Decoder for ConnectionCodec {
 			})));
 		}
 
+		tracing::debug!("ClientMessage {:?}", &src);
+
 		if src.len() < MESSAGE_HEADER_SIZE {
 			src.reserve(MESSAGE_HEADER_SIZE);
 			return Ok(None);
@@ -806,9 +771,12 @@ impl Decoder for ConnectionCodec {
 				// 	 Then, for each parameter, there is the following:
 				// Int32
 				// 	Specifies the object ID of the parameter data type. Placing a zero here is equivalent to leaving the type unspecified.
-				tracing::debug!("PARSE.src {:?}", &src);
+
+				tracing::debug!("ClientMessage::Parse {:?}", &src);
+
 				let prepared_statement_name = read_cstr(src)?;
 				let query = read_cstr(src)?;
+
 				// pgbench seems to send zero as a single byte if the zero is the last element
 				let num_params = if src.len() == 1 {
 					src.get_i8() as i16
@@ -821,7 +789,7 @@ impl Decoder for ConnectionCodec {
 				ClientMessage::Parse(Parse {
 					prepared_statement_name,
 					query,
-					parameter_types: Vec::new(),
+					parameter_types: params,
 				})
 			}
 			b'D' => {
@@ -836,7 +804,7 @@ impl Decoder for ConnectionCodec {
 
 				// String
 				// 	The name of the prepared statement or portal to describe (an empty string selects the unnamed prepared statement or portal).
-				tracing::debug!("ClientMessage::Describe src {:?}", &src);
+				tracing::debug!("ClientMessage::Describe {:?}", &src);
 
 				let target_type = src.get_u8();
 				let name = read_cstr(src).unwrap_or("".to_string());
@@ -849,7 +817,7 @@ impl Decoder for ConnectionCodec {
 			}
 			b'S' => ClientMessage::Sync,
 			b'B' => {
-				tracing::debug!("BIND.src {:?}", &src);
+				tracing::debug!("ClientMessage::Bind {:?}", &src);
 
 				let portal = read_cstr(src)?;
 				let prepared_statement_name = read_cstr(src)?;
@@ -882,7 +850,7 @@ impl Decoder for ConnectionCodec {
 						};
 
 						let format_code = FormatCode::try_from(code)?;
-						BindFormat::All(format_code.into())
+						BindFormat::All(format_code)
 					}
 					n => {
 						let mut result_format_codes = Vec::new();
