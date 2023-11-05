@@ -51,16 +51,23 @@ struct BoundPortal<E: Engine> {
 /// Describes a connection using a specific engine.
 /// Contains connection state including prepared statements and portals.
 pub struct Connection<E: Engine> {
+	id: String,
 	engine: E,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
 	portals: HashMap<String, Option<BoundPortal<E>>>,
 }
 
+fn id() -> String {
+	use rand::distributions::{Alphanumeric, DistString};
+	Alphanumeric.sample_string(&mut rand::thread_rng(), 24).to_lowercase()
+}
+
 impl<E: Engine> Connection<E> {
 	/// Create a new connection from an engine instance.
 	pub fn new(engine: E) -> Self {
 		Self {
+			id: id(),
 			state: ConnectionState::Startup,
 			statements: HashMap::new(),
 			portals: HashMap::new(),
@@ -148,16 +155,18 @@ impl<E: Engine> Connection<E> {
 			ConnectionState::Idle => {
 				match framed.next().await.ok_or(ConnectionError::ConnectionClosed)?? {
 					ClientMessage::Parse(parse) => {
-						tracing::debug!("Connection.Parse");
+						tracing::debug!("Connection.Parse {}", self.id);
 
 						let parsed_statement = self.parse_statement(&parse.query)?;
 
-						tracing::debug!("prepared_statement {:?}", parsed_statement);
+						tracing::debug!("Statement {} {:?}", self.id, parsed_statement);
 
 						if let Some(statement) = &parsed_statement {
-							tracing::debug!("Preparing Statement Engine");
-							let statement_description =
-								self.engine.prepare(&parse.prepared_statement_name, statement).await?;
+							tracing::debug!("Preparing Statement Engine {}", self.id);
+							let statement_description = self
+								.engine
+								.prepare(&parse.prepared_statement_name, statement, parse.parameter_types)
+								.await?;
 
 							let prepared_statement = PreparedStatement {
 								statement: parsed_statement,
@@ -168,11 +177,11 @@ impl<E: Engine> Connection<E> {
 							self.statements
 								.insert(parse.prepared_statement_name, prepared_statement);
 						}
-						tracing::debug!("sent");
+
 						framed.send(ParseComplete).await?;
 					}
 					ClientMessage::Bind(bind) => {
-						tracing::debug!("Connection.Bind");
+						tracing::debug!("Connection.Bind {}", self.id);
 
 						let format_code = match bind.result_format {
 							BindFormat::All(format) => format,
@@ -185,7 +194,7 @@ impl<E: Engine> Connection<E> {
 							}
 						};
 
-						tracing::debug!("format_code {:?}", format_code);
+						tracing::debug!("Binding FormatCode {} {:?}", self.id, &format_code);
 
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
 
@@ -206,6 +215,9 @@ impl<E: Engine> Connection<E> {
 									.into());
 								}
 
+								tracing::debug!("Parameters {} {:?}", self.id, &binding);
+								// tracing::debug!("Parameters {} {:?}", self.id, parsed_statement);
+
 								let portal = self
 									.engine
 									.create_portal(
@@ -221,24 +233,24 @@ impl<E: Engine> Connection<E> {
 									fields: prepared.fields.clone(),
 									format_code,
 								};
+
 								Some(BoundPortal { portal, row_desc })
 							}
 							None => None,
 						};
 
-						if portal.is_some() {
-							tracing::debug!("INSERT PORTAL");
-							self.portals.insert(bind.portal, portal);
+						if portal.is_none() {
+							tracing::warn!("Connection.Bind {} Portal=None", self.id);
 						}
 
+						self.portals.insert(bind.portal, portal);
+						tracing::debug!("Connection.BindComplete {}", self.id);
 						framed.send(BindComplete).await?;
 					}
 					ClientMessage::Describe(Describe::PreparedStatement(ref statement_name)) => {
-						tracing::debug!("Connection.DescribePreparedStatement");
+						tracing::debug!("Connection.DescribePreparedStatement {}", self.id);
 
 						let prepared_statement = self.prepared_statement(statement_name)?;
-
-						tracing::debug!("prepared_statement {:?}", &prepared_statement);
 
 						let parameters = prepared_statement.parameters.clone();
 						let fields = prepared_statement.fields.clone();
@@ -253,36 +265,48 @@ impl<E: Engine> Connection<E> {
 							.await?;
 					}
 					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => framed.send(portal.row_desc.clone()).await?,
-						None => framed.send(NoData).await?,
-					},
-					ClientMessage::Sync => {
-						framed.send(ReadyForQuery).await?;
-					}
-					ClientMessage::Execute(exec) => match self.portal_mut(&exec.portal)? {
-						Some(bound) => {
-							tracing::debug!("Connection.Execute");
-
-							let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
-
-							bound.portal.execute(&mut batch_writer).await?;
-
-							let num_rows = batch_writer.num_rows();
-
-							framed.send(batch_writer).await?;
-
-							framed
-								.send(CommandComplete {
-									command_tag: format!("SELECT {}", num_rows),
-								})
-								.await?;
+						Some(portal) => {
+							tracing::debug!("Connection.DescribePortal {}", self.id);
+							tracing::debug!("Portal Name {:?}", portal_name);
+							framed.send(portal.row_desc.clone()).await?;
 						}
 						None => {
-							framed.send(EmptyQueryResponse).await?;
+							tracing::debug!("Connection.DescribePortal NoData {}", self.id);
+							framed.send(NoData).await?;
 						}
 					},
+					ClientMessage::Sync => {
+						tracing::debug!("Connection.Sync {}", self.id);
+						framed.send(ReadyForQuery).await?;
+					}
+					ClientMessage::Execute(exec) => {
+						tracing::debug!("Connection.Execute {}", self.id);
+						match self.portal_mut(&exec.portal)? {
+							Some(bound) => {
+								let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
+
+								tracing::debug!("Portal.Execute");
+								bound.portal.execute(&mut batch_writer).await?;
+
+								let num_rows = batch_writer.num_rows();
+
+								tracing::debug!("Send");
+
+								framed.send(batch_writer).await?;
+
+								framed
+									.send(CommandComplete {
+										command_tag: format!("SELECT {}", num_rows),
+									})
+									.await?;
+							}
+							None => {
+								framed.send(EmptyQueryResponse).await?;
+							}
+						}
+					}
 					ClientMessage::Query(query) => {
-						tracing::debug!("Connection.Query");
+						tracing::debug!("Connection.Query {}", self.id);
 
 						if let Some(parsed) = self.parse_statement(&query)? {
 							let format_code = FormatCode::Text;
@@ -331,18 +355,24 @@ impl<E: Engine> Connection<E> {
 			let new_state = match self.step(&mut framed).await {
 				Ok(Some(state)) => state,
 				Ok(None) => return Ok(()),
-				Err(ConnectionError::ErrorResponse(err_info)) => {
-					tracing::debug!("error response: {:?}", err_info);
-					framed.send(err_info.clone()).await?;
+				Err(ConnectionError::ErrorResponse(err)) => {
+					tracing::warn!("ConnectionError::ErrorResponse {} {:?}", self.id, err);
 
-					if err_info.severity == Severity::Fatal {
-						return Err(err_info.into());
+					framed.send(err.clone()).await?;
+
+					if err.severity == Severity::Fatal {
+						tracing::error!("Error not recoverable");
+						return Err(err.into());
 					}
+
+					tracing::info!("Connection::ReadyForQuery {}", self.id);
 
 					framed.send(ReadyForQuery).await?;
 					ConnectionState::Idle
 				}
 				Err(err) => {
+					tracing::error!("ConnectionError {} {:?}", self.id, err);
+
 					framed
 						.send(ErrorResponse::fatal(SqlState::ConnectionException, "connection error"))
 						.await?;
