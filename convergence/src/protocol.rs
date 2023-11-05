@@ -791,10 +791,32 @@ impl Decoder for ConnectionCodec {
 
 		let message = match message_tag {
 			b'P' => {
+				// 	Byte1('P')
+				// 	  Identifies the message as a Parse command.
+				//
+				// Int32
+				//   Length of message contents in bytes, including self.
+				// String
+				// 	The name of the destination prepared statement (an empty string selects the unnamed prepared statement).
+				// String
+				// 	The query string to be parsed.
+				// Int16
+				//   The number of parameter data types specified (can be zero).
+				// 	 Note that this is not an indication of the number of parameters that might appear in the query string, only the number that the frontend wants to prespecify types for.
+				// 	 Then, for each parameter, there is the following:
+				// Int32
+				// 	Specifies the object ID of the parameter data type. Placing a zero here is equivalent to leaving the type unspecified.
+				tracing::debug!("PARSE.src {:?}", &src);
 				let prepared_statement_name = read_cstr(src)?;
 				let query = read_cstr(src)?;
-				let num_params = src.get_i16();
-				let _params: Vec<_> = (0..num_params).map(|_| src.get_u32()).collect();
+				// pgbench seems to send zero as a single byte if the zero is the last element
+				let num_params = if src.len() == 1 {
+					src.get_i8() as i16
+				} else {
+					src.get_i16()
+				};
+
+				let params: Vec<DataTypeOid> = (0..num_params).map(|_| DataTypeOid::from(src.get_u32())).collect();
 
 				ClientMessage::Parse(Parse {
 					prepared_statement_name,
