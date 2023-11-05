@@ -836,6 +836,8 @@ impl Decoder for ConnectionCodec {
 			}
 			b'S' => ClientMessage::Sync,
 			b'B' => {
+				tracing::debug!("BIND.src {:?}", &src);
+
 				let portal = read_cstr(src)?;
 				let prepared_statement_name = read_cstr(src)?;
 
@@ -858,7 +860,17 @@ impl Decoder for ConnectionCodec {
 
 				let result_format = match src.get_i16() {
 					0 => BindFormat::All(FormatCode::Text),
-					1 => BindFormat::All(src.get_i16().try_into()?),
+					1 => {
+						// pgbench does not send enough bytes
+						let code = if src.len() == 1 {
+							src.get_i8() as i16
+						} else {
+							src.get_i16()
+						};
+
+						let format_code = FormatCode::try_from(code)?;
+						BindFormat::All(format_code.into())
+					}
 					n => {
 						let mut result_format_codes = Vec::new();
 						for _ in 0..n {
