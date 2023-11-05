@@ -825,8 +825,21 @@ impl Decoder for ConnectionCodec {
 				})
 			}
 			b'D' => {
+				// 	Byte1('D')
+				// 	Identifies the message as a Describe command.
+
+				// Int32
+				// 	Length of message contents in bytes, including self.
+
+				// Byte1
+				// 	'S' to describe a prepared statement; or 'P' to describe a portal.
+
+				// String
+				// 	The name of the prepared statement or portal to describe (an empty string selects the unnamed prepared statement or portal).
+				tracing::debug!("ClientMessage::Describe src {:?}", &src);
+
 				let target_type = src.get_u8();
-				let name = read_cstr(src)?;
+				let name = read_cstr(src).unwrap_or("".to_string());
 
 				ClientMessage::Describe(match target_type {
 					b'P' => Describe::Portal(name),
