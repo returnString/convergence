@@ -316,43 +316,6 @@ pub enum Close {
 	PreparedStatement(String),
 }
 
-// Byte1('B')
-// Identifies the message as a Bind command.
-
-// Int32
-// Length of message contents in bytes, including self.
-
-// String
-// The name of the destination portal (an empty string selects the unnamed portal).
-
-// String
-// The name of the source prepared statement (an empty string selects the unnamed prepared statement).
-
-// Int16
-// The number of parameter format codes that follow (denoted C below). This can be zero to indicate that there are no parameters or that the parameters all use the default format (text); or one, in which case the specified format code is applied to all parameters; or it can equal the actual number of parameters.
-
-// Int16[C]
-// The parameter format codes. Each must presently be zero (text) or one (binary).
-
-// Int16
-// The number of parameter values that follow (possibly zero). This must match the number of parameters needed by the query.
-
-// Next, the following pair of fields appear for each parameter:
-
-// Int32
-// The length of the parameter value, in bytes (this count does not include itself). Can be zero. As a special case, -1 indicates a NULL parameter value. No value bytes follow in the NULL case.
-
-// Byten
-// The value of the parameter, in the format indicated by the associated format code. n is the above length.
-
-// After the last parameter, the following fields appear:
-
-// Int16
-// The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
-
-// Int16[R]
-// The result-column format codes. Each must presently be zero (text) or one (binary).
-
 #[derive(Debug)]
 pub struct Execute {
 	pub portal: String,
@@ -766,6 +729,8 @@ impl Decoder for ConnectionCodec {
 			})));
 		}
 
+		tracing::debug!("ClientMessage {:?}", &src);
+
 		if src.len() < MESSAGE_HEADER_SIZE {
 			src.reserve(MESSAGE_HEADER_SIZE);
 			return Ok(None);
@@ -791,20 +756,58 @@ impl Decoder for ConnectionCodec {
 
 		let message = match message_tag {
 			b'P' => {
+				// 	Byte1('P')
+				// 	  Identifies the message as a Parse command.
+				//
+				// Int32
+				//   Length of message contents in bytes, including self.
+				// String
+				// 	The name of the destination prepared statement (an empty string selects the unnamed prepared statement).
+				// String
+				// 	The query string to be parsed.
+				// Int16
+				//   The number of parameter data types specified (can be zero).
+				// 	 Note that this is not an indication of the number of parameters that might appear in the query string, only the number that the frontend wants to prespecify types for.
+				// 	 Then, for each parameter, there is the following:
+				// Int32
+				// 	Specifies the object ID of the parameter data type. Placing a zero here is equivalent to leaving the type unspecified.
+
+				tracing::debug!("ClientMessage::Parse {:?}", &src);
+
 				let prepared_statement_name = read_cstr(src)?;
 				let query = read_cstr(src)?;
-				let num_params = src.get_i16();
-				let _params: Vec<_> = (0..num_params).map(|_| src.get_u32()).collect();
+
+				// pgbench seems to send zero as a single byte if the zero is the last element
+				let num_params = if src.len() == 1 {
+					src.get_i8() as i16
+				} else {
+					src.get_i16()
+				};
+
+				let params: Vec<DataTypeOid> = (0..num_params).map(|_| DataTypeOid::from(src.get_u32())).collect();
 
 				ClientMessage::Parse(Parse {
 					prepared_statement_name,
 					query,
-					parameter_types: Vec::new(),
+					parameter_types: params,
 				})
 			}
 			b'D' => {
+				// 	Byte1('D')
+				// 	Identifies the message as a Describe command.
+
+				// Int32
+				// 	Length of message contents in bytes, including self.
+
+				// Byte1
+				// 	'S' to describe a prepared statement; or 'P' to describe a portal.
+
+				// String
+				// 	The name of the prepared statement or portal to describe (an empty string selects the unnamed prepared statement or portal).
+				tracing::debug!("ClientMessage::Describe {:?}", &src);
+
 				let target_type = src.get_u8();
-				let name = read_cstr(src)?;
+				let name = read_cstr(src).unwrap_or("".to_string());
 
 				ClientMessage::Describe(match target_type {
 					b'P' => Describe::Portal(name),
@@ -814,6 +817,8 @@ impl Decoder for ConnectionCodec {
 			}
 			b'S' => ClientMessage::Sync,
 			b'B' => {
+				tracing::debug!("ClientMessage::Bind {:?}", &src);
+
 				let portal = read_cstr(src)?;
 				let prepared_statement_name = read_cstr(src)?;
 
@@ -836,7 +841,17 @@ impl Decoder for ConnectionCodec {
 
 				let result_format = match src.get_i16() {
 					0 => BindFormat::All(FormatCode::Text),
-					1 => BindFormat::All(src.get_i16().try_into()?),
+					1 => {
+						// pgbench does not send enough bytes
+						let code = if src.len() == 1 {
+							src.get_i8() as i16
+						} else {
+							src.get_i16()
+						};
+
+						let format_code = FormatCode::try_from(code)?;
+						BindFormat::All(format_code)
+					}
 					n => {
 						let mut result_format_codes = Vec::new();
 						for _ in 0..n {
@@ -854,12 +869,20 @@ impl Decoder for ConnectionCodec {
 				})
 			}
 			b'E' => {
-				let portal = read_cstr(src)?;
-				let max_rows = match src.get_i32() {
-					0 => None,
-					other => Some(other),
-				};
+				// Byte1('E')
+				//   Identifies the message as an Execute command.
+				// Int32
+				//   Length of message contents in bytes, including self.
+				// String
+				// 	 The name of the portal to execute (an empty string selects the unnamed portal).
+				// Int32
+				//   Maximum number of rows to return, if portal contains a query that returns rows (ignored otherwise). Zero denotes “no limit”.
 
+				tracing::debug!("EXECUTE.src {:?}", &src);
+
+				let portal = read_cstr(src)?;
+
+				let max_rows = if src.is_empty() { None } else { Some(src.get_i32()) };
 				ClientMessage::Execute(Execute { portal, max_rows })
 			}
 			b'Q' => {

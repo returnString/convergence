@@ -25,7 +25,12 @@ pub trait Engine: Send + Sync + 'static {
 
 	/// Prepares a statement, returning a vector of field descriptions for the final statement result.
 	// async fn prepare(&mut self, stmt: &Statement) -> Result<Vec<FieldDescription>, ErrorResponse>;
-	async fn prepare(&mut self, stmt_name: &str, stmt: &Statement) -> Result<StatementDescription, ErrorResponse>;
+	async fn prepare(
+		&mut self,
+		stmt_name: &str,
+		stmt: &Statement,
+		parameter_types: Vec<DataTypeOid>,
+	) -> Result<StatementDescription, ErrorResponse>;
 
 	/// Creates a new portal for a prepared statement and passings params for decoding.
 	async fn create_portal(
