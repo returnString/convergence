@@ -96,6 +96,9 @@ to_wire!(i8);
 to_wire!(i16);
 to_wire!(i32);
 to_wire!(i64);
+to_wire!(u8);
+to_wire!(u16);
+to_wire!(u32);
 to_wire!(f32);
 to_wire!(f64);
 
