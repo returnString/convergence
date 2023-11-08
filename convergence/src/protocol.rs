@@ -5,10 +5,10 @@
 #![allow(missing_docs)]
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::Display;
 use std::mem::size_of;
-use std::{collections::HashMap, convert::TryInto};
 use tokio_util::codec::{Decoder, Encoder};
 
 macro_rules! data_types {
@@ -731,6 +731,11 @@ impl Decoder for ConnectionCodec {
 
 		tracing::debug!("ClientMessage {:?}", &src);
 
+		if src.is_empty() {
+			tracing::debug!("ClientMessage::Empty");
+			return Ok(None);
+		}
+
 		if src.len() < MESSAGE_HEADER_SIZE {
 			src.reserve(MESSAGE_HEADER_SIZE);
 			return Ok(None);
@@ -809,6 +814,11 @@ impl Decoder for ConnectionCodec {
 				let target_type = src.get_u8();
 				let name = read_cstr(src).unwrap_or("".to_string());
 
+				tracing::debug!("target_type {:?}", target_type);
+				tracing::debug!("name {:?}", name);
+
+				// P - ASCII 80
+				// S - ASCII 83
 				ClientMessage::Describe(match target_type {
 					b'P' => Describe::Portal(name),
 					b'S' => Describe::PreparedStatement(name),
@@ -817,6 +827,44 @@ impl Decoder for ConnectionCodec {
 			}
 			b'S' => ClientMessage::Sync,
 			b'B' => {
+				/*
+				// 	Byte1('B')
+				// 	Identifies the message as a Bind command.
+				//
+				// 	Int32
+				// 		Length of message contents in bytes, including self.
+				//
+				// 	String
+				// 		The name of the destination portal (an empty string selects the unnamed portal).
+				//
+				// 	String
+				// 		The name of the source prepared statement (an empty string selects the unnamed prepared statement).
+				// Int16
+				// 		The number of parameter format codes that follow (denoted C below). This can be zero to indicate that there are no parameters or that the parameters all use the default format (text); or one, in which case the specified format code is applied to all parameters; or it can equal the actual number of parameters.
+				//
+				// Int16[C]
+				// 		The parameter format codes. Each must presently be zero (text) or one (binary).
+				// Int16
+				// 		The number of parameter values that follow (possibly zero). This must match the number of parameters needed by the query.
+				//
+				// Next, the following pair of fields appear for each parameter:
+				//
+				// Int32
+				// 		The length of the parameter value, in bytes (this count does not include itself). Can be zero. As a special case, -1 indicates a NULL parameter value. No value bytes follow in the NULL case.
+				//
+				// Byte n
+				// 		The value of the parameter, in the format indicated by the associated format code. n is the above length.
+				//
+				// After the last parameter, the following fields appear:
+				//
+				// Int16
+				// 		The number of result-column format codes that follow (denoted R below). This can be zero to indicate that there are no result columns or that the result columns should all use the default format (text); or one, in which case the specified format code is applied to all result columns (if any); or it can equal the actual number of result columns of the query.
+				//
+				// Int16[R]
+				// 		The result-column format codes. Each must presently be zero (text) or one (binary).
+				//
+					*/
+
 				tracing::debug!("ClientMessage::Bind {:?}", &src);
 
 				let portal = read_cstr(src)?;
@@ -855,7 +903,9 @@ impl Decoder for ConnectionCodec {
 					n => {
 						let mut result_format_codes = Vec::new();
 						for _ in 0..n {
-							result_format_codes.push(src.get_i16().try_into()?);
+							let code = src.get_i16();
+							let format_code = FormatCode::try_from(code)?;
+							result_format_codes.push(format_code);
 						}
 						BindFormat::PerColumn(result_format_codes)
 					}
@@ -932,5 +982,89 @@ impl Encoder<SSLResponse> for ConnectionCodec {
 	fn encode(&mut self, item: SSLResponse, dst: &mut BytesMut) -> Result<(), Self::Error> {
 		dst.put_u8(if item.0 { b'S' } else { b'N' });
 		Ok(())
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use bytes::BytesMut;
+	use tokio_util::codec::Decoder;
+	use tracing_subscriber::EnvFilter;
+
+	use crate::protocol::{ClientMessage, ConnectionCodec, Describe};
+	use pretty_assertions::assert_eq;
+
+	fn get_test_codec() -> ConnectionCodec {
+		let mut codec = ConnectionCodec::new();
+		codec.startup_received = true;
+		codec
+	}
+
+	fn _with_tracing() {
+		let env_filter = EnvFilter::new("debug");
+
+		tracing_subscriber::fmt()
+			.with_target(false)
+			.with_env_filter(env_filter)
+			.pretty()
+			.init();
+	}
+
+	#[test]
+	pub fn test_client_message_describe() {
+		let messages = [
+			BytesMut::from(&b"D\0\0\0\x06P"[..]),
+			// Buffer contains Describe 'D' and Execute 'E' messages
+			// Only the Describe message should be parsed
+			BytesMut::from(&b"D\0\0\0\x06P\0E\0\0\0\t\0\0\0\0"[..]),
+		];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+			let message = codec.decode(&mut src).unwrap();
+
+			match message {
+				Some(ClientMessage::Describe(Describe::Portal(name))) => {
+					assert_eq!(name, "");
+				}
+				_ => assert_eq!(true, false, "Expected ClientMessage::Describe"),
+			}
+
+			assert!(!src.iter().any(|&b| b == b'D'));
+		}
+	}
+
+	#[test]
+	pub fn test_client_message_empty() {
+		let messages = [BytesMut::from(&b""[..])];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+
+			let message = codec.decode(&mut src).unwrap();
+
+			assert!(message.is_none());
+		}
+	}
+
+	#[test]
+	pub fn test_client_message_execute() {
+		// with_tracing();
+
+		let messages = [BytesMut::from(&b"E\0\0\0\t\0\0\0\0\0S\0\0\0\x04"[..])];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+
+			let message = codec.decode(&mut src).unwrap();
+			match message {
+				Some(ClientMessage::Execute(execute)) => {
+					assert_eq!(execute.portal, "");
+				}
+				_ => assert_eq!(true, false, "Expected ClientMessage::Execute"),
+			}
+
+			assert!(!src.iter().any(|&b| b == b'E'));
+		}
 	}
 }
