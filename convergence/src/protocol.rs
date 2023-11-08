@@ -741,6 +741,11 @@ impl Decoder for ConnectionCodec {
 			return Ok(None);
 		}
 
+		if src[0] == b'\0' {
+			tracing::debug!("ClientMessage::Zero");
+			src.get_u8();
+		}
+
 		let mut header_buf = src.clone();
 		let message_tag = header_buf.get_u8();
 		let message_len = header_buf.get_i32() as usize;
@@ -932,7 +937,15 @@ impl Decoder for ConnectionCodec {
 
 				let portal = read_cstr(src)?;
 
-				let max_rows = if src.is_empty() { None } else { Some(src.get_i32()) };
+				let max_rows = if src.len() >= 4 { Some(src.get_i32()) } else { Some(0) };
+
+				// Occasionally pgbench has 3 bytes instead of 4.
+				// We assume zero and clear the buffer of any trailing zeros
+				while !src.is_empty() && src[0] == 0 {
+					tracing::debug!("EXECUTE: clearing buffer");
+					src.get_u8();
+				}
+
 				ClientMessage::Execute(Execute { portal, max_rows })
 			}
 			b'Q' => {
@@ -991,7 +1004,7 @@ mod tests {
 	use tokio_util::codec::Decoder;
 	use tracing_subscriber::EnvFilter;
 
-	use crate::protocol::{ClientMessage, ConnectionCodec, Describe};
+	use crate::protocol::{BindFormat, ClientMessage, ConnectionCodec, Describe, FormatCode};
 	use pretty_assertions::assert_eq;
 
 	fn get_test_codec() -> ConnectionCodec {
@@ -1031,6 +1044,51 @@ mod tests {
 			}
 
 			assert!(!src.iter().any(|&b| b == b'D'));
+
+			// The last message should not be empty and should start with 'E'
+			if !src.is_empty() {
+				assert!(src[0] == b'E');
+			}
+		}
+	}
+
+	#[test]
+	pub fn test_client_message_bind() {
+		let messages = [BytesMut::from(&b"B\0\0\0\x0e\0\0\0\0\0\0\0\x01\0\0D\0\0\0\x06P\0"[..])];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+			let message = codec.decode(&mut src).unwrap();
+
+			match message {
+				Some(ClientMessage::Bind(bind)) => {
+					assert_eq!(bind.portal, "");
+
+					match bind.result_format {
+						BindFormat::All(FormatCode::Text) => {}
+						_ => assert_eq!(true, false, "Expected FormatCode::Binary"),
+					}
+				}
+				_ => assert_eq!(true, false, "Expected ClientMessage::Bind"),
+			}
+
+			assert!(!src.iter().any(|&b| b == b'B'));
+		}
+	}
+
+	#[test]
+	pub fn test_client_message_terminate() {
+		let messages = [BytesMut::from(&b"X\0\0\0\x04"[..])];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+
+			let message = codec.decode(&mut src).unwrap();
+
+			match message {
+				Some(ClientMessage::Terminate) => {}
+				_ => assert_eq!(true, false, "Expected ClientMessage::Terminate"),
+			};
 		}
 	}
 
@@ -1049,9 +1107,11 @@ mod tests {
 
 	#[test]
 	pub fn test_client_message_execute() {
-		// with_tracing();
-
-		let messages = [BytesMut::from(&b"E\0\0\0\t\0\0\0\0\0S\0\0\0\x04"[..])];
+		let messages = [
+			BytesMut::from(&b"E\0\0\0\t\0\0\0\0\0S\0\0\0\x04"[..]),
+			BytesMut::from(&b"E\0\0\0\t\0\0\0\0"[..]),
+			BytesMut::from(&b"\0E\0\0\0\t\0\0\0\0"[..]),
+		];
 
 		for mut src in messages {
 			let mut codec = get_test_codec();
@@ -1065,6 +1125,36 @@ mod tests {
 			}
 
 			assert!(!src.iter().any(|&b| b == b'E'));
+		}
+	}
+
+	#[test]
+	pub fn test_client_message_leading_mystery_bytes() {
+		let messages = [
+			BytesMut::from(&b"\0D\0\0\0\x06P"[..]),
+			// BytesMut::from(&b"0D\0\0\0\x06P"[..]),
+			// Buffer contains Describe 'D' and Execute 'E' messages
+			// Only the Describe message should be parsed
+			BytesMut::from(&b"D\0\0\0\x06P\0E\0\0\0\t\0\0\0\0"[..]),
+		];
+
+		for mut src in messages {
+			let mut codec = get_test_codec();
+			let message = codec.decode(&mut src).unwrap();
+
+			match message {
+				Some(ClientMessage::Describe(Describe::Portal(name))) => {
+					assert_eq!(name, "");
+				}
+				_ => assert_eq!(true, false, "Expected ClientMessage::Describe"),
+			}
+
+			assert!(!src.iter().any(|&b| b == b'D'));
+
+			// The last message should not be empty and should start with 'E'
+			if !src.is_empty() {
+				assert!(src[0] == b'E');
+			}
 		}
 	}
 }
