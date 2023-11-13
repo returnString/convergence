@@ -183,7 +183,7 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Bind(bind) => {
 						tracing::debug!("Connection.Bind {}", self.id);
 
-						let format_code = match bind.result_format {
+						let result_format = match bind.result_format {
 							BindFormat::All(format) => format,
 							BindFormat::PerColumn(_) => {
 								return Err(ErrorResponse::error(
@@ -194,7 +194,7 @@ impl<E: Engine> Connection<E> {
 							}
 						};
 
-						tracing::debug!("Binding FormatCode {} {:?}", self.id, &format_code);
+						tracing::debug!("Binding FormatCode {} {:?}", self.id, &result_format);
 
 						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
 
@@ -202,7 +202,7 @@ impl<E: Engine> Connection<E> {
 							Some(statement) => {
 								let params = prepared.parameters;
 								let binding = bind.parameters;
-								// let format = bind.result_format;
+								// let format_codes = bind.param_format;
 
 								if binding.len() != params.len() {
 									return Err(ErrorResponse::error(
@@ -215,8 +215,27 @@ impl<E: Engine> Connection<E> {
 									.into());
 								}
 
-								tracing::debug!("Parameters {} {:?}", self.id, &binding);
-								// tracing::debug!("Parameters {} {:?}", self.id, parsed_statement);
+								let binding_format_codes = match bind.param_format {
+									BindFormat::All(format) => {
+										vec![format; params.len()]
+									}
+									BindFormat::PerColumn(format) => format,
+								};
+
+								tracing::debug!("Binding Parameters {} {:?}", self.id, &binding);
+								tracing::debug!("Binding Param FormatCode {} {:?}", self.id, &binding_format_codes);
+								tracing::debug!("Binding Result FormatCode {} {:?}", self.id, &result_format);
+
+								if binding_format_codes.len() != binding.len() {
+									return Err(ErrorResponse::error(
+										SqlState::SyntaxError,
+										format!(
+											"wrong number of parameter format codes for prepared statement {}",
+											bind.prepared_statement_name
+										),
+									)
+									.into());
+								}
 
 								let portal = self
 									.engine
@@ -225,13 +244,13 @@ impl<E: Engine> Connection<E> {
 										&statement,
 										params,
 										binding,
-										format_code,
+										binding_format_codes,
 									)
 									.await?;
 
 								let row_desc = RowDescription {
 									fields: prepared.fields.clone(),
-									format_code,
+									format_code: result_format,
 								};
 
 								Some(BoundPortal { portal, row_desc })
