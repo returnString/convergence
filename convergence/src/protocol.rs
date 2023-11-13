@@ -257,7 +257,7 @@ data_types! {
 }
 
 /// Describes how to format a given value or set of values.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum FormatCode {
 	/// Use the stable text representation.
 	Text = 0,
@@ -306,6 +306,7 @@ pub enum BindFormat {
 pub struct Bind {
 	pub portal: String,
 	pub prepared_statement_name: String,
+	pub param_format: BindFormat,
 	pub result_format: BindFormat,
 	pub parameters: Vec<Bytes>,
 }
@@ -876,9 +877,27 @@ impl Decoder for ConnectionCodec {
 				let prepared_statement_name = read_cstr(src)?;
 
 				let num_param_format_codes = src.get_i16();
-				for _ in 0..num_param_format_codes {
-					let _format_code = src.get_i16();
-				}
+
+				// 0 No Parameters or Default
+				// 1 Format Code used all parameters
+				// N Format Code for each parameter
+				let param_format = match num_param_format_codes {
+					0 => BindFormat::All(FormatCode::Text),
+					1 => {
+						let code = src.get_i16();
+						let format_code = FormatCode::try_from(code)?;
+						BindFormat::All(format_code)
+					}
+					n => {
+						let mut result_format_codes = Vec::new();
+						for _ in 0..n {
+							let code = src.get_i16();
+							let format_code = FormatCode::try_from(code)?;
+							result_format_codes.push(format_code);
+						}
+						BindFormat::PerColumn(result_format_codes)
+					}
+				};
 
 				let mut parameters: Vec<Bytes> = vec![];
 				let num_params = src.get_i16();
@@ -916,9 +935,13 @@ impl Decoder for ConnectionCodec {
 					}
 				};
 
+				tracing::debug!("ClientMessage::Bind Parameters {:?}", parameters);
+				tracing::debug!("ClientMessage::Bind Format {:?}", param_format);
+
 				ClientMessage::Bind(Bind {
 					portal,
 					prepared_statement_name,
+					param_format,
 					result_format,
 					parameters,
 				})
@@ -1054,11 +1077,15 @@ mod tests {
 
 	#[test]
 	pub fn test_client_message_bind() {
-		let messages = [BytesMut::from(&b"B\0\0\0\x0e\0\0\0\0\0\0\0\x01\0\0D\0\0\0\x06P\0"[..])];
+		_with_tracing();
+		let mut messages = [
+			// BytesMut::from(&b"B\0\0\0\x0e\0\0\0\0\0\0\0\x01\0\0D\0\0\0\x06P\0"[..]),
+			BytesMut::from(&b"B\0\0\0H\0_pg3_1\0\0\x02\0\0\0\x01\0\x02\0\0\0${\"blah\": \"ZDK7ILQJKB\", \"vtha\": 3480}\0\0\0\x04\0\0\"\r\0\x01\0\0D\0\0\0\x06P\0E\0\0\0\t\0\0\0\0\0S\0\0\0\x04"[..]),
+		];
 
-		for mut src in messages {
+		for (msg, src) in messages.iter_mut().enumerate() {
 			let mut codec = get_test_codec();
-			let message = codec.decode(&mut src).unwrap();
+			let message = codec.decode(src).unwrap();
 
 			match message {
 				Some(ClientMessage::Bind(bind)) => {
@@ -1067,6 +1094,17 @@ mod tests {
 					match bind.result_format {
 						BindFormat::All(FormatCode::Text) => {}
 						_ => assert_eq!(true, false, "Expected FormatCode::Binary"),
+					}
+
+					if msg == 0 {
+						match bind.param_format {
+							BindFormat::PerColumn(format_codes) => {
+								assert_eq!(format_codes.len(), 2);
+								assert_eq!(format_codes[0], FormatCode::Text);
+								assert_eq!(format_codes[1], FormatCode::Binary);
+							}
+							_ => assert_eq!(true, false, "Expected FormatCode::PerColumn"),
+						}
 					}
 				}
 				_ => assert_eq!(true, false, "Expected ClientMessage::Bind"),

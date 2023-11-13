@@ -39,7 +39,7 @@ pub trait Engine: Send + Sync + 'static {
 		stmt: &Statement,
 		params: Vec<DataTypeOid>,
 		binding: Vec<Bytes>,
-		format: FormatCode,
+		param_format_codes: Vec<FormatCode>,
 	) -> Result<Self::PortalType, ErrorResponse>;
 
 	/// Queries directly without setting up a portal
