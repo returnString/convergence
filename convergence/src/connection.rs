@@ -37,7 +37,7 @@ enum ConnectionState {
 #[derive(Debug, Clone)]
 /// Wraps Parsed Statement and associated metadata
 pub struct PreparedStatement {
-	pub statement: Option<Statement>,
+	pub query: String,
 	pub fields: Vec<FieldDescription>,
 	pub parameters: Vec<DataTypeOid>,
 }
@@ -157,26 +157,24 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Parse(parse) => {
 						tracing::debug!("Connection.Parse {}", self.id);
 
-						let parsed_statement = self.parse_statement(&parse.query)?;
+						// let parsed_statement = self.parse_statement(&parse.query)?;
+						// tracing::debug!("Statement {} {:?}", self.id, parsed_statement);
 
-						tracing::debug!("Statement {} {:?}", self.id, parsed_statement);
+						tracing::debug!("Preparing Statement Engine {}", self.id);
 
-						if let Some(statement) = &parsed_statement {
-							tracing::debug!("Preparing Statement Engine {}", self.id);
-							let statement_description = self
-								.engine
-								.prepare(&parse.prepared_statement_name, statement, parse.parameter_types)
-								.await?;
+						let statement_description = self
+							.engine
+							.prepare(&parse.prepared_statement_name, &parse.query, parse.parameter_types)
+							.await?;
 
-							let prepared_statement = PreparedStatement {
-								statement: parsed_statement,
-								parameters: statement_description.parameters.unwrap_or(vec![]),
-								fields: statement_description.fields.unwrap_or(vec![]),
-							};
+						let prepared_statement = PreparedStatement {
+							query: parse.query.to_owned(),
+							parameters: statement_description.parameters.unwrap_or(vec![]),
+							fields: statement_description.fields.unwrap_or(vec![]),
+						};
 
-							self.statements
-								.insert(parse.prepared_statement_name, prepared_statement);
-						}
+						self.statements
+							.insert(parse.prepared_statement_name, prepared_statement);
 
 						framed.send(ParseComplete).await?;
 					}
@@ -194,15 +192,14 @@ impl<E: Engine> Connection<E> {
 							}
 						};
 
-						tracing::debug!("Binding FormatCode {} {:?}", self.id, &result_format);
+						let prepared = self.prepared_statement(&bind.prepared_statement_name);
 
-						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
+						match prepared {
+							Ok(prepared) => {
+								tracing::debug!("Connection.Bind {} Prepared={}", self.id, &prepared.query);
 
-						let portal = match prepared.statement {
-							Some(statement) => {
-								let params = prepared.parameters;
-								let binding = bind.parameters;
-								// let format_codes = bind.param_format;
+								let params = prepared.parameters.to_owned();
+								let binding = bind.parameters.to_owned();
 
 								if binding.len() != params.len() {
 									return Err(ErrorResponse::error(
@@ -239,30 +236,30 @@ impl<E: Engine> Connection<E> {
 
 								let portal = self
 									.engine
-									.create_portal(
-										&bind.prepared_statement_name,
-										&statement,
-										params,
-										binding,
-										binding_format_codes,
-									)
+									.create_portal(&bind.prepared_statement_name, params, binding, binding_format_codes)
 									.await?;
 
 								let row_desc = RowDescription {
-									fields: prepared.fields.clone(),
+									fields: prepared.fields.to_owned(),
 									format_code: result_format,
 								};
 
-								Some(BoundPortal { portal, row_desc })
-							}
-							None => None,
-						};
+								let portal = BoundPortal { portal, row_desc };
 
-						if portal.is_none() {
-							tracing::warn!("Connection.Bind {} Portal=None", self.id);
+								self.portals.insert(bind.portal, Some(portal));
+							}
+							Err(err) => {
+								tracing::error!("Connection.Bind {} {:?}", self.id, err);
+								tracing::warn!(
+									"Connection.Bind {} Missing Statement for {}",
+									self.id,
+									&bind.prepared_statement_name
+								);
+
+								self.portals.insert(bind.portal, None);
+							}
 						}
 
-						self.portals.insert(bind.portal, portal);
 						tracing::debug!("Connection.BindComplete {}", self.id);
 						framed.send(BindComplete).await?;
 					}
