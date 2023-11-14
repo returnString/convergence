@@ -55,7 +55,7 @@ pub struct Connection<E: Engine> {
 	engine: E,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
-	portals: HashMap<String, Option<BoundPortal<E>>>,
+	portals: HashMap<String, BoundPortal<E>>,
 }
 
 fn id() -> String {
@@ -82,14 +82,14 @@ impl<E: Engine> Connection<E> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidSQLStatementName, "missing statement"))?)
 	}
 
-	fn portal(&self, name: &str) -> Result<&Option<BoundPortal<E>>, ConnectionError> {
+	fn portal(&self, name: &str) -> Result<&BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
 			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidCursorName, "missing portal"))?)
 	}
 
-	fn portal_mut(&mut self, name: &str) -> Result<&mut Option<BoundPortal<E>>, ConnectionError> {
+	fn portal_mut(&mut self, name: &str) -> Result<&mut BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
@@ -246,7 +246,7 @@ impl<E: Engine> Connection<E> {
 
 								let portal = BoundPortal { portal, row_desc };
 
-								self.portals.insert(bind.portal, Some(portal));
+								self.portals.insert(bind.portal, portal);
 							}
 							Err(err) => {
 								tracing::error!("Connection.Bind {} {:?}", self.id, err);
@@ -279,14 +279,15 @@ impl<E: Engine> Connection<E> {
 							})
 							.await?;
 					}
-					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => {
+					ClientMessage::Describe(Describe::Portal(ref name)) => match self.portal(name) {
+						Ok(portal) => {
 							tracing::debug!("Connection.DescribePortal {}", self.id);
-							tracing::debug!("Portal Name {:?}", portal_name);
+							tracing::debug!("Portal Name {:?}", name);
 							framed.send(portal.row_desc.clone()).await?;
 						}
-						None => {
-							tracing::debug!("Connection.DescribePortal NoData {}", self.id);
+						Err(err) => {
+							tracing::error!("Connection.DescribePortal {} {:?}", self.id, err);
+							tracing::warn!("Connection.Bind {} Missing Portal for {}", self.id, name);
 							framed.send(NoData).await?;
 						}
 					},
@@ -297,8 +298,8 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Execute(exec) => {
 						tracing::debug!("Connection.Execute {}", &self.id);
 
-						match self.portal_mut(&exec.portal)? {
-							Some(bound) => {
+						match self.portal_mut(&exec.portal) {
+							Ok(bound) => {
 								let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
 
 								bound.portal.execute(&mut batch_writer).await?;
@@ -313,8 +314,9 @@ impl<E: Engine> Connection<E> {
 									})
 									.await?;
 							}
-							None => {
-								tracing::debug!("Connection.Portal.None {}", &self.id);
+							Err(err) => {
+								tracing::error!("Connection.Execute {} {:?}", self.id, err);
+								tracing::warn!("Connection.Bind {} Missing Statement for {}", self.id, &exec.portal);
 								framed.send(EmptyQueryResponse).await?;
 							}
 						}
