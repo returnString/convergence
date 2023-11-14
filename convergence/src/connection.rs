@@ -157,9 +157,6 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Parse(parse) => {
 						tracing::debug!("Connection.Parse {}", self.id);
 
-						// let parsed_statement = self.parse_statement(&parse.query)?;
-						// tracing::debug!("Statement {} {:?}", self.id, parsed_statement);
-
 						tracing::debug!("Preparing Statement Engine {}", self.id);
 
 						let statement_description = self
