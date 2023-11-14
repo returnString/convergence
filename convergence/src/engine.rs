@@ -28,15 +28,14 @@ pub trait Engine: Send + Sync + 'static {
 	async fn prepare(
 		&mut self,
 		stmt_name: &str,
-		stmt: &Statement,
+		statement: &str,
 		parameter_types: Vec<DataTypeOid>,
 	) -> Result<StatementDescription, ErrorResponse>;
 
 	/// Creates a new portal for a prepared statement and passings params for decoding.
 	async fn create_portal(
-		&mut self,
+		&self,
 		stmt_name: &str,
-		stmt: &Statement,
 		params: Vec<DataTypeOid>,
 		binding: Vec<Bytes>,
 		param_format_codes: Vec<FormatCode>,

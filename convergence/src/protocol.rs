@@ -820,9 +820,6 @@ impl Decoder for ConnectionCodec {
 				let target_type = src.get_u8();
 				let name = read_cstr(src).unwrap_or("".to_string());
 
-				tracing::debug!("target_type {:?}", target_type);
-				tracing::debug!("name {:?}", name);
-
 				// P - ASCII 80
 				// S - ASCII 83
 				ClientMessage::Describe(match target_type {
@@ -904,6 +901,9 @@ impl Decoder for ConnectionCodec {
 				for _ in 0..num_params {
 					let param_len = src.get_i32() as usize;
 					let _bytes = &src[0..param_len];
+
+					tracing::warn!("bytes {:?}", src);
+					tracing::warn!("bytes {:?}", _bytes);
 
 					let b = Bytes::copy_from_slice(_bytes);
 					parameters.push(b);

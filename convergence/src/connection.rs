@@ -37,7 +37,7 @@ enum ConnectionState {
 #[derive(Debug, Clone)]
 /// Wraps Parsed Statement and associated metadata
 pub struct PreparedStatement {
-	pub statement: Option<Statement>,
+	pub statement: String,
 	pub fields: Vec<FieldDescription>,
 	pub parameters: Vec<DataTypeOid>,
 }
@@ -55,7 +55,7 @@ pub struct Connection<E: Engine> {
 	engine: E,
 	state: ConnectionState,
 	statements: HashMap<String, PreparedStatement>,
-	portals: HashMap<String, Option<BoundPortal<E>>>,
+	portals: HashMap<String, BoundPortal<E>>,
 }
 
 fn id() -> String {
@@ -82,14 +82,14 @@ impl<E: Engine> Connection<E> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidSQLStatementName, "missing statement"))?)
 	}
 
-	fn portal(&self, name: &str) -> Result<&Option<BoundPortal<E>>, ConnectionError> {
+	fn portal(&self, name: &str) -> Result<&BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get(name)
 			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidCursorName, "missing portal"))?)
 	}
 
-	fn portal_mut(&mut self, name: &str) -> Result<&mut Option<BoundPortal<E>>, ConnectionError> {
+	fn portal_mut(&mut self, name: &str) -> Result<&mut BoundPortal<E>, ConnectionError> {
 		Ok(self
 			.portals
 			.get_mut(name)
@@ -157,26 +157,21 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Parse(parse) => {
 						tracing::debug!("Connection.Parse {}", self.id);
 
-						let parsed_statement = self.parse_statement(&parse.query)?;
+						tracing::debug!("Preparing Statement Engine {}", self.id);
 
-						tracing::debug!("Statement {} {:?}", self.id, parsed_statement);
+						let statement_description = self
+							.engine
+							.prepare(&parse.prepared_statement_name, &parse.query, parse.parameter_types)
+							.await?;
 
-						if let Some(statement) = &parsed_statement {
-							tracing::debug!("Preparing Statement Engine {}", self.id);
-							let statement_description = self
-								.engine
-								.prepare(&parse.prepared_statement_name, statement, parse.parameter_types)
-								.await?;
+						let prepared_statement = PreparedStatement {
+							statement: parse.query.to_owned(),
+							parameters: statement_description.parameters.unwrap_or(vec![]),
+							fields: statement_description.fields.unwrap_or(vec![]),
+						};
 
-							let prepared_statement = PreparedStatement {
-								statement: parsed_statement,
-								parameters: statement_description.parameters.unwrap_or(vec![]),
-								fields: statement_description.fields.unwrap_or(vec![]),
-							};
-
-							self.statements
-								.insert(parse.prepared_statement_name, prepared_statement);
-						}
+						self.statements
+							.insert(parse.prepared_statement_name, prepared_statement);
 
 						framed.send(ParseComplete).await?;
 					}
@@ -194,15 +189,14 @@ impl<E: Engine> Connection<E> {
 							}
 						};
 
-						tracing::debug!("Binding FormatCode {} {:?}", self.id, &result_format);
+						let prepared = self.prepared_statement(&bind.prepared_statement_name);
 
-						let prepared = self.prepared_statement(&bind.prepared_statement_name)?.clone();
+						match prepared {
+							Ok(prepared) => {
+								tracing::debug!("Connection.Bind {} Prepared={}", self.id, &prepared.statement);
 
-						let portal = match prepared.statement {
-							Some(statement) => {
-								let params = prepared.parameters;
-								let binding = bind.parameters;
-								// let format_codes = bind.param_format;
+								let params = prepared.parameters.to_owned();
+								let binding = bind.parameters.to_owned();
 
 								if binding.len() != params.len() {
 									return Err(ErrorResponse::error(
@@ -239,30 +233,29 @@ impl<E: Engine> Connection<E> {
 
 								let portal = self
 									.engine
-									.create_portal(
-										&bind.prepared_statement_name,
-										&statement,
-										params,
-										binding,
-										binding_format_codes,
-									)
+									.create_portal(&bind.prepared_statement_name, params, binding, binding_format_codes)
 									.await?;
 
 								let row_desc = RowDescription {
-									fields: prepared.fields.clone(),
+									fields: prepared.fields.to_owned(),
 									format_code: result_format,
 								};
 
-								Some(BoundPortal { portal, row_desc })
-							}
-							None => None,
-						};
+								let portal = BoundPortal { portal, row_desc };
 
-						if portal.is_none() {
-							tracing::warn!("Connection.Bind {} Portal=None", self.id);
+								self.portals.insert(bind.portal, portal);
+							}
+							Err(err) => {
+								tracing::error!("Connection.Bind {} {:?}", self.id, err);
+								tracing::warn!(
+									"Connection.Bind {} Missing Statement for {}",
+									self.id,
+									&bind.prepared_statement_name
+								);
+								return Err(err);
+							}
 						}
 
-						self.portals.insert(bind.portal, portal);
 						tracing::debug!("Connection.BindComplete {}", self.id);
 						framed.send(BindComplete).await?;
 					}
@@ -283,14 +276,15 @@ impl<E: Engine> Connection<E> {
 							})
 							.await?;
 					}
-					ClientMessage::Describe(Describe::Portal(ref portal_name)) => match self.portal(portal_name)? {
-						Some(portal) => {
+					ClientMessage::Describe(Describe::Portal(ref name)) => match self.portal(name) {
+						Ok(portal) => {
 							tracing::debug!("Connection.DescribePortal {}", self.id);
-							tracing::debug!("Portal Name {:?}", portal_name);
+							tracing::debug!("Portal Name {:?}", name);
 							framed.send(portal.row_desc.clone()).await?;
 						}
-						None => {
-							tracing::debug!("Connection.DescribePortal NoData {}", self.id);
+						Err(err) => {
+							tracing::error!("Connection.DescribePortal {} {:?}", self.id, err);
+							tracing::warn!("Connection.Bind {} Missing Portal for {}", self.id, name);
 							framed.send(NoData).await?;
 						}
 					},
@@ -301,8 +295,8 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Execute(exec) => {
 						tracing::debug!("Connection.Execute {}", &self.id);
 
-						match self.portal_mut(&exec.portal)? {
-							Some(bound) => {
+						match self.portal_mut(&exec.portal) {
+							Ok(bound) => {
 								let mut batch_writer = DataRowBatch::from_row_desc(&bound.row_desc);
 
 								bound.portal.execute(&mut batch_writer).await?;
@@ -317,8 +311,9 @@ impl<E: Engine> Connection<E> {
 									})
 									.await?;
 							}
-							None => {
-								tracing::debug!("Connection.Portal.None {}", &self.id);
+							Err(err) => {
+								tracing::error!("Connection.Execute {} {:?}", self.id, err);
+								tracing::warn!("Connection.Bind {} Missing Statement for {}", self.id, &exec.portal);
 								framed.send(EmptyQueryResponse).await?;
 							}
 						}
