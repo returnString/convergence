@@ -37,7 +37,7 @@ enum ConnectionState {
 #[derive(Debug, Clone)]
 /// Wraps Parsed Statement and associated metadata
 pub struct PreparedStatement {
-	pub query: String,
+	pub statement: String,
 	pub fields: Vec<FieldDescription>,
 	pub parameters: Vec<DataTypeOid>,
 }
@@ -168,7 +168,7 @@ impl<E: Engine> Connection<E> {
 							.await?;
 
 						let prepared_statement = PreparedStatement {
-							query: parse.query.to_owned(),
+							statement: parse.query.to_owned(),
 							parameters: statement_description.parameters.unwrap_or(vec![]),
 							fields: statement_description.fields.unwrap_or(vec![]),
 						};
@@ -196,7 +196,7 @@ impl<E: Engine> Connection<E> {
 
 						match prepared {
 							Ok(prepared) => {
-								tracing::debug!("Connection.Bind {} Prepared={}", self.id, &prepared.query);
+								tracing::debug!("Connection.Bind {} Prepared={}", self.id, &prepared.statement);
 
 								let params = prepared.parameters.to_owned();
 								let binding = bind.parameters.to_owned();

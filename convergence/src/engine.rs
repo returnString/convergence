@@ -28,7 +28,7 @@ pub trait Engine: Send + Sync + 'static {
 	async fn prepare(
 		&mut self,
 		stmt_name: &str,
-		query: &str,
+		statement: &str,
 		parameter_types: Vec<DataTypeOid>,
 	) -> Result<StatementDescription, ErrorResponse>;
 
