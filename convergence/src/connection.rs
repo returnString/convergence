@@ -255,8 +255,7 @@ impl<E: Engine> Connection<E> {
 									self.id,
 									&bind.prepared_statement_name
 								);
-
-								self.portals.insert(bind.portal, None);
+								return Err(err);
 							}
 						}
 
