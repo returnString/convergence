@@ -3,7 +3,6 @@ use crate::protocol::{DataTypeOid, ErrorResponse, FieldDescription, FormatCode, 
 use crate::protocol_ext::DataRowBatch;
 use async_trait::async_trait;
 use bytes::Bytes;
-use sqlparser::ast::Statement;
 
 /// A Postgres portal. Portals represent a prepared statement with all parameters specified.
 ///
@@ -44,7 +43,7 @@ pub trait Engine: Send + Sync + 'static {
 	/// Queries directly without setting up a portal
 	async fn query(
 		&mut self,
-		stmt: &Statement,
+		statement: &str,
 		batch: &mut DataRowBatch,
 	) -> Result<Vec<FieldDescription>, ErrorResponse>;
 }

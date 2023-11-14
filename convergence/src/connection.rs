@@ -96,7 +96,7 @@ impl<E: Engine> Connection<E> {
 			.ok_or_else(|| ErrorResponse::error(SqlState::InvalidCursorName, "missing portal"))?)
 	}
 
-	fn parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ErrorResponse> {
+	fn _parse_statement(&mut self, text: &str) -> Result<Option<Statement>, ErrorResponse> {
 		let statements = Parser::parse_sql(&PostgreSqlDialect {}, text)
 			.map_err(|err| ErrorResponse::error(SqlState::SyntaxError, err.to_string()))?;
 
@@ -321,26 +321,27 @@ impl<E: Engine> Connection<E> {
 					ClientMessage::Query(query) => {
 						tracing::debug!("Connection.Query {}", self.id);
 
-						if let Some(parsed) = self.parse_statement(&query)? {
-							let format_code = FormatCode::Text;
-							let mut batch_writer = DataRowBatch::new(format_code);
+						let format_code = FormatCode::Text;
+						let mut batch_writer = DataRowBatch::new(format_code);
 
-							let fields = self.engine.query(&parsed, &mut batch_writer).await?;
-							let num_rows = batch_writer.num_rows();
+						let fields = self.engine.query(&query, &mut batch_writer).await?;
+						let num_rows = batch_writer.num_rows();
 
-							let row_desc = RowDescription { fields, format_code };
+						let row_desc = RowDescription { fields, format_code };
 
-							framed.send(row_desc).await?;
-							framed.send(batch_writer).await?;
+						framed.send(row_desc).await?;
+						framed.send(batch_writer).await?;
 
-							framed
-								.send(CommandComplete {
-									command_tag: format!("SELECT {}", num_rows),
-								})
-								.await?;
-						} else {
-							framed.send(EmptyQueryResponse).await?;
-						}
+						framed
+							.send(CommandComplete {
+								command_tag: format!("SELECT {}", num_rows),
+							})
+							.await?;
+
+						// } else {
+						// 	framed.send(EmptyQueryResponse).await?;
+						// }
+
 						framed.send(ReadyForQuery).await?;
 					}
 					ClientMessage::Terminate => return Ok(None),
