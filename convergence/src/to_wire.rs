@@ -1,5 +1,5 @@
 use bytes::BytesMut;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use postgres_types::ToSql;
 use rust_decimal::Decimal;
 
@@ -75,6 +75,17 @@ impl ToWire for NaiveTime {
 		let delta = self.signed_duration_since(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
 		let t = delta.num_microseconds().unwrap_or(0);
 		t.to_binary()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
+impl ToWire for DateTime<Utc> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::NUMERIC, &mut b).unwrap();
+		b.into()
 	}
 	fn to_text(&self) -> Vec<u8> {
 		self.to_string().as_bytes().into()
