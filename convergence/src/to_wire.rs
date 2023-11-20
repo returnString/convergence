@@ -86,7 +86,7 @@ impl ToWire for DateTime<Utc> {
 		self.naive_utc().to_binary()
 	}
 	fn to_text(&self) -> Vec<u8> {
-		self.to_string().as_bytes().into()
+		self.to_rfc3339().as_bytes().into()
 	}
 }
 
