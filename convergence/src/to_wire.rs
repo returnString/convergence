@@ -83,9 +83,7 @@ impl ToWire for NaiveTime {
 
 impl ToWire for DateTime<Utc> {
 	fn to_binary(&self) -> Vec<u8> {
-		let mut b = BytesMut::new();
-		self.to_sql(&postgres_types::Type::NUMERIC, &mut b).unwrap();
-		b.into()
+		self.naive_utc().to_binary()
 	}
 	fn to_text(&self) -> Vec<u8> {
 		self.to_string().as_bytes().into()
