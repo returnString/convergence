@@ -101,6 +101,61 @@ impl ToWire for Decimal {
 	}
 }
 
+impl ToWire for postgres_array::Array<i16> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::INT2_ARRAY, &mut b).unwrap();
+		b.into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
+impl ToWire for postgres_array::Array<i32> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::INT4_ARRAY, &mut b).unwrap();
+		b.into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
+impl ToWire for postgres_array::Array<i64> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::INT8_ARRAY, &mut b).unwrap();
+		b.into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
+impl ToWire for postgres_array::Array<f32> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::FLOAT4_ARRAY, &mut b).unwrap();
+		b.into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
+impl ToWire for postgres_array::Array<f64> {
+	fn to_binary(&self) -> Vec<u8> {
+		let mut b = BytesMut::new();
+		self.to_sql(&postgres_types::Type::FLOAT8_ARRAY, &mut b).unwrap();
+		b.into()
+	}
+	fn to_text(&self) -> Vec<u8> {
+		self.to_string().as_bytes().into()
+	}
+}
+
 macro_rules! to_wire {
 	($type: ident) => {
 		#[allow(missing_docs)]
