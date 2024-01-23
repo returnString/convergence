@@ -41,6 +41,8 @@ fn dummy_query() -> Statement {
 		fetch: None,
 		offset: None,
 		order_by: vec![],
+		for_clause: None,
+		limit_by: vec![],
 	}))
 }
 

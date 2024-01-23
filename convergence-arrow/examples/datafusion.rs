@@ -11,7 +11,7 @@ use datafusion::scalar::ScalarValue;
 use std::sync::Arc;
 
 async fn new_engine() -> DataFusionEngine {
-	let ctx = SessionContext::with_config(
+	let ctx = SessionContext::new_with_config(
 		SessionConfig::new()
 			.with_information_schema(true)
 			.with_create_default_catalog_and_schema(false),
