@@ -2,8 +2,9 @@ use convergence::server::{self, BindOptions};
 use convergence_arrow::datafusion::DataFusionEngine;
 use convergence_arrow::metadata::Catalog;
 use datafusion::arrow::datatypes::DataType;
-use datafusion::catalog::schema::MemorySchemaProvider;
-use datafusion::catalog::{CatalogProvider, MemoryCatalogProvider};
+use datafusion::catalog_common::memory::MemorySchemaProvider;
+use datafusion::catalog::CatalogProvider;
+use datafusion::catalog_common::MemoryCatalogProvider;
 use datafusion::logical_expr::Volatility;
 use datafusion::physical_plan::ColumnarValue;
 use datafusion::prelude::*;
@@ -35,7 +36,7 @@ async fn new_engine() -> DataFusionEngine {
 	ctx.register_udf(create_udf(
 		"pg_backend_pid",
 		vec![],
-		Arc::new(DataType::Int32),
+		DataType::Int32,
 		Volatility::Stable,
 		Arc::new(|_| Ok(ColumnarValue::Scalar(ScalarValue::Int32(Some(0))))),
 	));
@@ -43,7 +44,7 @@ async fn new_engine() -> DataFusionEngine {
 	ctx.register_udf(create_udf(
 		"current_schema",
 		vec![],
-		Arc::new(DataType::Utf8),
+		DataType::Utf8,
 		Volatility::Stable,
 		Arc::new(|_| Ok(ColumnarValue::Scalar(ScalarValue::Utf8(Some("public".to_owned()))))),
 	));

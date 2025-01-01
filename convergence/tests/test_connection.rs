@@ -79,16 +79,16 @@ async fn extended_query_flow() {
 async fn simple_query_flow() {
 	let client = setup().await;
 	let messages = client.simple_query("select 1").await.unwrap();
-	assert_eq!(messages.len(), 2);
+	assert_eq!(messages.len(), 3);
 
-	let row = match &messages[0] {
+	let row = match &messages[1] {
 		SimpleQueryMessage::Row(row) => row,
 		_ => panic!("expected row"),
 	};
 
 	assert_eq!(row.get(0), Some("1"));
 
-	let num_rows = match &messages[1] {
+	let num_rows = match &messages[2] {
 		SimpleQueryMessage::CommandComplete(rows) => *rows,
 		_ => panic!("expected command complete"),
 	};
