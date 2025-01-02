@@ -138,7 +138,7 @@ impl<'a> DataRowWriter<'a> {
 	primitive_write!(write_float8, f64);
 }
 
-impl<'a> Drop for DataRowWriter<'a> {
+impl Drop for DataRowWriter<'_> {
 	fn drop(&mut self) {
 		assert_eq!(
 			self.parent.num_cols, self.current_col,
