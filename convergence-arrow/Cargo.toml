@@ -13,6 +13,5 @@ async-trait = "0.1"
 datafusion = "47"
 convergence = { path = "../convergence", version = "0.16.0" }
 chrono = "0.4"
-
-[dev-dependencies]
 tokio-postgres = { version =  "0.7", features = [ "with-chrono-0_4" ] }
+rust_decimal = { version = "1.37.1", features = ["default", "db-postgres"] }
