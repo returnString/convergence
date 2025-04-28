@@ -3,6 +3,8 @@
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
 use chrono::{NaiveDate, NaiveDateTime};
+use rust_decimal::Decimal;
+use tokio_postgres::types::{ToSql, Type};
 use tokio_util::codec::Encoder;
 
 /// Supports batched rows for e.g. returning portal result sets.
@@ -129,6 +131,24 @@ impl<'a> DataRowWriter<'a> {
 			}
 			FormatCode::Text => self.write_string(&val.to_string()),
 		}
+	}
+
+	/// Writes a numeric value for the next column.
+	pub fn write_numeric_16(&mut self, val: i128, _p: &u8, s: &i8) {
+		let decimal = Decimal::from_i128_with_scale(val, *s as u32);
+		match self.parent.format_code {
+			FormatCode::Text => {
+				self.write_string(&decimal.to_string())
+			}
+			FormatCode::Binary => {
+				let numeric_type = Type::from_oid(1700).expect("failed to create numeric type");
+				let mut buf = BytesMut::new();
+				decimal.to_sql(&numeric_type, &mut buf)
+					.expect("failed to write numeric");
+
+				self.write_value(&buf.freeze())
+			}
+		};
 	}
 
 	primitive_write!(write_int2, i16);

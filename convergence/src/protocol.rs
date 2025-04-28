@@ -75,6 +75,8 @@ data_types! {
 	Float4 = 700, 4
 	Float8 = 701, 8
 
+	Numeric = 1700, -1
+
 	Date = 1082, 4
 	Timestamp = 1114, 8
 
