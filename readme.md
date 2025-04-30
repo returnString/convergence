@@ -1,5 +1,5 @@
 # Convergence
-![Tests](https://github.com/returnString/convergence/workflows/Test/badge.svg) ![Crates.io](https://img.shields.io/crates/v/convergence)
+![Tests](https://github.com/returnString/convergence/actions/workflows/test.yml/badge.svg?branch=main) ![Crates.io](https://img.shields.io/crates/v/convergence)
 
 A set of tools for writing servers that speak PostgreSQL's wire protocol.
 
