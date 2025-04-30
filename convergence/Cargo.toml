@@ -10,7 +10,7 @@ repository = "https://github.com/returnString/convergence"
 [dependencies]
 tokio = { version = "1", features = [ "net", "rt-multi-thread", "macros", "io-util", "io-std" ] }
 tokio-util = { version = "0.7", features = [ "codec" ] }
-thiserror = "1"
+thiserror = "2"
 bytes = "1"
 futures = "0.3"
 sqlparser = "0.55"
