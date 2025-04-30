@@ -5,7 +5,9 @@ use async_trait::async_trait;
 use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
-use convergence::sqlparser::ast::{Expr, GroupByExpr, Query, Select, SelectItem, SetExpr, Statement, Value};
+use convergence::sqlparser::ast::Statement;
+use convergence::sqlparser::dialect::PostgreSqlDialect;
+use convergence::sqlparser::parser::Parser;
 use datafusion::error::DataFusionError;
 use datafusion::prelude::*;
 
@@ -15,38 +17,8 @@ fn df_err_to_sql(err: DataFusionError) -> ErrorResponse {
 
 // dummy query used as replacement for set variable statements etc
 fn dummy_query() -> Statement {
-	Statement::Query(Box::new(Query {
-		body: Box::new(SetExpr::Select(Box::new(Select {
-			into: None,
-			qualify: None,
-			projection: vec![SelectItem::UnnamedExpr(Expr::Value(Value::Number(
-				"1".to_owned(),
-				false,
-			)))],
-			top: None,
-			sort_by: vec![],
-			selection: None,
-			cluster_by: vec![],
-			distinct: None,
-			distribute_by: vec![],
-			group_by: GroupByExpr::Expressions(vec![]),
-			from: vec![],
-			having: None,
-			lateral_views: vec![],
-			named_window: vec![],
-			connect_by: None,
-			value_table_mode: None,
-			window_before_qualify: false,
-		}))),
-		locks: vec![],
-		limit: None,
-		with: None,
-		fetch: None,
-		offset: None,
-		order_by: vec![],
-		for_clause: None,
-		limit_by: vec![],
-	}))
+	let mut statements = Parser::parse_sql(&PostgreSqlDialect {}, "select 1").expect("failed to parse dummy statement");
+	statements.remove(0)
 }
 
 fn translate_statement(statement: &Statement) -> Statement {
