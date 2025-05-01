@@ -1,6 +1,6 @@
 [package]
 name = "convergence-arrow"
-version = "0.17.0"
+version = "0.17.1"
 authors = ["Ruan Pearce-Authers <ruanpa@outlook.com>"]
 edition = "2018"
 description = "Utils for bridging Apache Arrow and PostgreSQL's wire protocol"
