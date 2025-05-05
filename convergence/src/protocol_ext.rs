@@ -2,7 +2,7 @@
 
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
 use rust_decimal::Decimal;
 use tokio_postgres::types::{ToSql, Type};
 use tokio_util::codec::Encoder;
@@ -133,17 +133,29 @@ impl<'a> DataRowWriter<'a> {
 		}
 	}
 
+	/// Writes a timestamp with timezone value for the next column.
+	pub fn write_timestamp_with_tz(&mut self, val: DateTime<FixedOffset>) {
+		match self.parent.format_code {
+			FormatCode::Binary => {
+				let ts_tz_type = Type::from_oid(1184).expect("failed to create timestamptz type");
+				let mut buf = BytesMut::new();
+				val.to_sql(&ts_tz_type, &mut buf).expect("failed to write timestamptz");
+				self.write_value(&buf.freeze())
+			}
+			FormatCode::Text => self.write_string(&val.to_string()),
+		}
+	}
+
 	/// Writes a numeric value for the next column.
 	pub fn write_numeric_16(&mut self, val: i128, _p: &u8, s: &i8) {
 		let decimal = Decimal::from_i128_with_scale(val, *s as u32);
 		match self.parent.format_code {
-			FormatCode::Text => {
-				self.write_string(&decimal.to_string())
-			}
+			FormatCode::Text => self.write_string(&decimal.to_string()),
 			FormatCode::Binary => {
 				let numeric_type = Type::from_oid(1700).expect("failed to create numeric type");
 				let mut buf = BytesMut::new();
-				decimal.to_sql(&numeric_type, &mut buf)
+				decimal
+					.to_sql(&numeric_type, &mut buf)
 					.expect("failed to write numeric");
 
 				self.write_value(&buf.freeze())

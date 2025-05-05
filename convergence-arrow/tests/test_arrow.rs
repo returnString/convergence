@@ -1,16 +1,19 @@
 use async_trait::async_trait;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use convergence::engine::{Engine, Portal};
 use convergence::protocol::{ErrorResponse, FieldDescription};
 use convergence::protocol_ext::DataRowBatch;
 use convergence::server::{self, BindOptions};
 use convergence::sqlparser::ast::Statement;
 use convergence_arrow::table::{record_batch_to_rows, schema_to_field_desc};
-use datafusion::arrow::array::{ArrayRef, Date32Array, Decimal128Array, Float32Array, Int32Array, StringArray, StringViewArray, TimestampSecondArray};
+use datafusion::arrow::array::{
+	ArrayRef, Date32Array, Decimal128Array, Float32Array, Int32Array, StringArray, StringViewArray,
+	TimestampSecondArray,
+};
 use datafusion::arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
-use std::sync::Arc;
 use rust_decimal::Decimal;
+use std::sync::Arc;
 use tokio_postgres::{connect, NoTls};
 
 struct ArrowPortal {
@@ -32,10 +35,17 @@ impl ArrowEngine {
 	fn new() -> Self {
 		let int_col = Arc::new(Int32Array::from(vec![1, 2, 3])) as ArrayRef;
 		let float_col = Arc::new(Float32Array::from(vec![1.5, 2.5, 3.5])) as ArrayRef;
-		let decimal_col = Arc::new(Decimal128Array::from(vec![11, 22, 33]).with_precision_and_scale(2, 0).unwrap()) as ArrayRef;
+		let decimal_col = Arc::new(
+			Decimal128Array::from(vec![11, 22, 33])
+				.with_precision_and_scale(2, 0)
+				.unwrap(),
+		) as ArrayRef;
 		let string_col = Arc::new(StringArray::from(vec!["a", "b", "c"])) as ArrayRef;
 		let string_view_col = Arc::new(StringViewArray::from(vec!["aa", "bb", "cc"])) as ArrayRef;
 		let ts_col = Arc::new(TimestampSecondArray::from(vec![1577836800, 1580515200, 1583020800])) as ArrayRef;
+		let ts_tz_col =
+			Arc::new(TimestampSecondArray::from(vec![1577854800, 1580533200, 1583038800]).with_timezone("+05:00"))
+				as ArrayRef;
 		let date_col = Arc::new(Date32Array::from(vec![0, 1, 2])) as ArrayRef;
 
 		let schema = Schema::new(vec![
@@ -45,12 +55,29 @@ impl ArrowEngine {
 			Field::new("string_col", DataType::Utf8, true),
 			Field::new("string_view_col", DataType::Utf8View, true),
 			Field::new("ts_col", DataType::Timestamp(TimeUnit::Second, None), true),
+			Field::new(
+				"ts_tz_col",
+				DataType::Timestamp(TimeUnit::Second, Some("+05:00".into())),
+				true,
+			),
 			Field::new("date_col", DataType::Date32, true),
 		]);
 
 		Self {
-			batch: RecordBatch::try_new(Arc::new(schema), vec![int_col, float_col, decimal_col, string_col, string_view_col, ts_col, date_col])
-				.expect("failed to create batch"),
+			batch: RecordBatch::try_new(
+				Arc::new(schema),
+				vec![
+					int_col,
+					float_col,
+					decimal_col,
+					string_col,
+					string_view_col,
+					ts_col,
+					ts_tz_col,
+					date_col,
+				],
+			)
+			.expect("failed to create batch"),
 		}
 	}
 }
@@ -94,8 +121,16 @@ async fn basic_data_types() {
 	let rows = client.query("select 1", &[]).await.unwrap();
 	let get_row = |idx: usize| {
 		let row = &rows[idx];
-		let cols: (i32, f32, Decimal, &str, &str, NaiveDateTime, NaiveDate) =
-			(row.get(0), row.get(1), row.get(2), row.get(3), row.get(4), row.get(5), row.get(6));
+		let cols: (i32, f32, Decimal, &str, &str, NaiveDateTime, DateTime<_>, NaiveDate) = (
+			row.get(0),
+			row.get(1),
+			row.get(2),
+			row.get(3),
+			row.get(4),
+			row.get(5),
+			row.get(6),
+			row.get(7),
+		);
 		cols
 	};
 
@@ -111,6 +146,7 @@ async fn basic_data_types() {
 				.unwrap()
 				.and_hms_opt(0, 0, 0)
 				.unwrap(),
+			DateTime::from_timestamp_millis(1577854800000).unwrap(),
 			NaiveDate::from_ymd_opt(1970, 1, 1).unwrap(),
 		)
 	);
@@ -126,6 +162,7 @@ async fn basic_data_types() {
 				.unwrap()
 				.and_hms_opt(0, 0, 0)
 				.unwrap(),
+			DateTime::from_timestamp_millis(1580533200000).unwrap(),
 			NaiveDate::from_ymd_opt(1970, 1, 2).unwrap()
 		)
 	);
@@ -141,6 +178,7 @@ async fn basic_data_types() {
 				.unwrap()
 				.and_hms_opt(0, 0, 0)
 				.unwrap(),
+			DateTime::from_timestamp_millis(1583038800000).unwrap(),
 			NaiveDate::from_ymd_opt(1970, 1, 3).unwrap()
 		)
 	);
