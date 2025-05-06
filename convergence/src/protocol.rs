@@ -79,6 +79,7 @@ data_types! {
 
 	Date = 1082, 4
 	Timestamp = 1114, 8
+	Timestamptz = 1184, 8
 
 	Text = 25, -1
 }

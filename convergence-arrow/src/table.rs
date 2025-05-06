@@ -1,12 +1,15 @@
 //! Utilities for converting between Arrow and Postgres formats.
 
+use std::str::FromStr;
+
 use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlState};
 use convergence::protocol_ext::DataRowBatch;
+use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::{
-	BooleanArray, Date32Array, Date64Array, Decimal128Array, Float16Array,
-   	Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, StringArray,
-	StringViewArray, TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
-	TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array, UInt8Array
+	BooleanArray, Date32Array, Date64Array, Decimal128Array, Float16Array, Float32Array, Float64Array, Int16Array,
+	Int32Array, Int64Array, Int8Array, StringArray, StringViewArray, TimestampMicrosecondArray,
+	TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array,
+	UInt8Array,
 };
 use datafusion::arrow::datatypes::{DataType, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
@@ -61,23 +64,52 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported date type")
 						})?)
 					}
-					DataType::Timestamp(unit, None) => row.write_timestamp(
-						match unit {
-							TimeUnit::Second => array_val!(TimestampSecondArray, col, row_idx, value_as_datetime),
-							TimeUnit::Millisecond => {
-								array_val!(TimestampMillisecondArray, col, row_idx, value_as_datetime)
+					DataType::Timestamp(unit, tz) => {
+						match tz {
+							Some(tz) => {
+								let tz = Tz::from_str(tz.as_ref()).map_err(|_| {
+									ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported timezone")
+								})?;
+								let dt = match unit {
+									TimeUnit::Second => array_cast!(TimestampSecondArray, col)
+										.value_as_datetime_with_tz(row_idx, tz)
+										.map(|d| d.fixed_offset()),
+									TimeUnit::Millisecond => array_cast!(TimestampMillisecondArray, col)
+										.value_as_datetime_with_tz(row_idx, tz)
+										.map(|d| d.fixed_offset()),
+									TimeUnit::Microsecond => array_cast!(TimestampMicrosecondArray, col)
+										.value_as_datetime_with_tz(row_idx, tz)
+										.map(|d| d.fixed_offset()),
+									TimeUnit::Nanosecond => array_cast!(TimestampNanosecondArray, col)
+										.value_as_datetime_with_tz(row_idx, tz)
+										.map(|d| d.fixed_offset()),
+								}
+								.ok_or_else(|| {
+									ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported timestamp type")
+								})?;
+								row.write_timestamp_with_tz(dt)
 							}
-							TimeUnit::Microsecond => {
-								array_val!(TimestampMicrosecondArray, col, row_idx, value_as_datetime)
-							}
-							TimeUnit::Nanosecond => {
-								array_val!(TimestampNanosecondArray, col, row_idx, value_as_datetime)
-							}
-						}
-						.ok_or_else(|| {
-							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported timestamp type")
-						})?,
-					),
+							None => row.write_timestamp(
+								match unit {
+									TimeUnit::Second => {
+										array_val!(TimestampSecondArray, col, row_idx, value_as_datetime)
+									}
+									TimeUnit::Millisecond => {
+										array_val!(TimestampMillisecondArray, col, row_idx, value_as_datetime)
+									}
+									TimeUnit::Microsecond => {
+										array_val!(TimestampMicrosecondArray, col, row_idx, value_as_datetime)
+									}
+									TimeUnit::Nanosecond => {
+										array_val!(TimestampNanosecondArray, col, row_idx, value_as_datetime)
+									}
+								}
+								.ok_or_else(|| {
+									ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported timestamp type")
+								})?,
+							),
+						};
+					}
 					other => {
 						return Err(ErrorResponse::error(
 							SqlState::FeatureNotSupported,
@@ -108,7 +140,10 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 		DataType::Decimal128(_, _) => DataTypeOid::Numeric,
 		DataType::Utf8 | DataType::Utf8View => DataTypeOid::Text,
 		DataType::Date32 | DataType::Date64 => DataTypeOid::Date,
-		DataType::Timestamp(_, None) => DataTypeOid::Timestamp,
+		DataType::Timestamp(_, tz) => match tz {
+			Some(_) => DataTypeOid::Timestamptz,
+			None => DataTypeOid::Timestamp,
+		},
 		other => {
 			return Err(ErrorResponse::error(
 				SqlState::FeatureNotSupported,
