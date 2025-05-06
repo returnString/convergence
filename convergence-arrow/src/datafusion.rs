@@ -23,7 +23,7 @@ fn dummy_query() -> Statement {
 
 fn translate_statement(statement: &Statement) -> Statement {
 	match statement {
-		Statement::SetVariable { .. } => dummy_query(),
+		Statement::Set { .. } => dummy_query(),
 		other => other.clone(),
 	}
 }
