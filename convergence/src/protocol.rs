@@ -78,8 +78,13 @@ data_types! {
 	Numeric = 1700, -1
 
 	Date = 1082, 4
+
+	Time = 1083, 8
+
 	Timestamp = 1114, 8
 	Timestamptz = 1184, 8
+
+	Interval = 1186, 16
 
 	Text = 25, -1
 }
