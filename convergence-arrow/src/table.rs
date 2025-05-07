@@ -6,10 +6,11 @@ use convergence::protocol::{DataTypeOid, ErrorResponse, FieldDescription, SqlSta
 use convergence::protocol_ext::DataRowBatch;
 use datafusion::arrow::array::timezone::Tz;
 use datafusion::arrow::array::{
-	BooleanArray, Date32Array, Date64Array, Decimal128Array, Float16Array, Float32Array, Float64Array, Int16Array,
-	Int32Array, Int64Array, Int8Array, StringArray, StringViewArray, TimestampMicrosecondArray,
-	TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array,
-	UInt8Array,
+	BooleanArray, Date32Array, Date64Array, Decimal128Array, DurationMicrosecondArray, DurationMillisecondArray,
+	DurationNanosecondArray, DurationSecondArray, Float16Array, Float32Array, Float64Array, Int16Array, Int32Array,
+	Int64Array, Int8Array, StringArray, StringViewArray, Time32MillisecondArray, Time32SecondArray,
+	Time64MicrosecondArray, Time64NanosecondArray, TimestampMicrosecondArray, TimestampMillisecondArray,
+	TimestampNanosecondArray, TimestampSecondArray, UInt16Array, UInt32Array, UInt64Array, UInt8Array,
 };
 use datafusion::arrow::datatypes::{DataType, Schema, TimeUnit};
 use datafusion::arrow::record_batch::RecordBatch;
@@ -64,6 +65,54 @@ pub fn record_batch_to_rows(arrow_batch: &RecordBatch, pg_batch: &mut DataRowBat
 							ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported date type")
 						})?)
 					}
+					DataType::Time32(unit) => match unit {
+						TimeUnit::Second => {
+							row.write_time(array_val!(Time32SecondArray, col, row_idx, value_as_time).ok_or_else(
+								|| ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type"),
+							)?)
+						}
+						TimeUnit::Millisecond => row.write_time(
+							array_val!(Time32MillisecondArray, col, row_idx, value_as_time).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						_ => {}
+					},
+					DataType::Time64(unit) => match unit {
+						TimeUnit::Microsecond => row.write_time(
+							array_val!(Time64MicrosecondArray, col, row_idx, value_as_time).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						TimeUnit::Nanosecond => row.write_time(
+							array_val!(Time64NanosecondArray, col, row_idx, value_as_time).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						_ => {}
+					},
+					DataType::Duration(unit) => match unit {
+						TimeUnit::Second => row.write_duration(
+							array_val!(DurationSecondArray, col, row_idx, value_as_duration).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						TimeUnit::Millisecond => row.write_duration(
+							array_val!(DurationMillisecondArray, col, row_idx, value_as_duration).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						TimeUnit::Microsecond => row.write_duration(
+							array_val!(DurationMicrosecondArray, col, row_idx, value_as_duration).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+						TimeUnit::Nanosecond => row.write_duration(
+							array_val!(DurationNanosecondArray, col, row_idx, value_as_duration).ok_or_else(|| {
+								ErrorResponse::error(SqlState::InvalidDatetimeFormat, "unsupported time type")
+							})?,
+						),
+					},
 					DataType::Timestamp(unit, tz) => {
 						match tz {
 							Some(tz) => {
@@ -140,6 +189,8 @@ pub fn data_type_to_oid(ty: &DataType) -> Result<DataTypeOid, ErrorResponse> {
 		DataType::Decimal128(_, _) => DataTypeOid::Numeric,
 		DataType::Utf8 | DataType::Utf8View => DataTypeOid::Text,
 		DataType::Date32 | DataType::Date64 => DataTypeOid::Date,
+		DataType::Time32(_) | DataType::Time64(_) => DataTypeOid::Time,
+		DataType::Duration(_) => DataTypeOid::Interval,
 		DataType::Timestamp(_, tz) => match tz {
 			Some(_) => DataTypeOid::Timestamptz,
 			None => DataTypeOid::Timestamp,

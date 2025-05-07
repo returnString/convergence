@@ -2,7 +2,7 @@
 
 use crate::protocol::{ConnectionCodec, FormatCode, ProtocolError, RowDescription};
 use bytes::{BufMut, BytesMut};
-use chrono::{DateTime, FixedOffset, NaiveDate, NaiveDateTime};
+use chrono::{DateTime, Duration, FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, Timelike};
 use rust_decimal::Decimal;
 use tokio_postgres::types::{ToSql, Type};
 use tokio_util::codec::Encoder;
@@ -119,7 +119,31 @@ impl<'a> DataRowWriter<'a> {
 		}
 	}
 
-	/// Writes a timestamp value for the next column.
+	/// Writes a time value for the next column.
+	pub fn write_time(&mut self, val: NaiveTime) {
+		match self.parent.format_code {
+			FormatCode::Binary => {
+				self.write_int8((val.num_seconds_from_midnight() * 1_000_000 + val.nanosecond() / 1_000) as i64);
+			}
+			FormatCode::Text => self.write_string(&val.to_string()),
+		}
+	}
+
+	/// Writes a time value for the next column.
+	pub fn write_duration(&mut self, val: Duration) {
+		match self.parent.format_code {
+			FormatCode::Binary => {
+				let total_micros = val.num_microseconds().unwrap_or_else(|| {
+					// Fallback for very large durations that may not fit in i64 microseconds
+					val.num_seconds() * 1_000_000 + (val.subsec_nanos() as i64) / 1_000
+				});
+				self.write_int8(total_micros);
+			}
+			FormatCode::Text => self.write_string(&val.to_string()),
+		}
+	}
+
+	/// Writes a timestamp value fxor the next column.
 	pub fn write_timestamp(&mut self, val: NaiveDateTime) {
 		match self.parent.format_code {
 			FormatCode::Binary => {
